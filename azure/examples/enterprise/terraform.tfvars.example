@@ -1,0 +1,10 @@
+subscription_id     = "12345678-1234-1234-1234-123456789012"
+resource_group_name = "materialize-enterprise-rg"
+name_prefix         = "mz-enterprise"
+location            = "westus2"
+license_key         = "your-materialize-license-key"
+ory_issuer_url      = "https://auth.example.com/"
+tags = {
+  environment = "demo"
+  project     = "materialize-enterprise"
+}

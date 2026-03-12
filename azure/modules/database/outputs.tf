@@ -1,3 +1,8 @@
+output "server_id" {
+  description = "The ID of the PostgreSQL server"
+  value       = azurerm_postgresql_flexible_server.postgres.id
+}
+
 output "server_name" {
   description = "The name of the PostgreSQL server"
   value       = azurerm_postgresql_flexible_server.postgres.name
