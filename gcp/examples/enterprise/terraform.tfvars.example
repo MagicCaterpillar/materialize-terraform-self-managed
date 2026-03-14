@@ -1,0 +1,9 @@
+project_id     = "my-gcp-project-id"
+region         = "us-central1"
+name_prefix    = "mz-enterprise"
+license_key    = "your-materialize-license-key"
+ory_issuer_url = "https://auth.example.com/"
+labels = {
+  environment = "demo"
+  project     = "materialize-enterprise"
+}
