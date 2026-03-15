@@ -1,0 +1,9 @@
+aws_region     = "us-east-1"
+aws_profile    = "default"
+name_prefix    = "mz-enterprise"
+license_key    = "your-materialize-license-key"
+ory_issuer_url = "https://auth.example.com/"
+tags = {
+  environment = "demo"
+  project     = "materialize-enterprise"
+}
