@@ -544,11 +544,45 @@ module "materialize_nlb" {
 # Ory: Identity & OAuth2 (Kratos + Hydra)
 # -----------------------------------------------------------------------------
 
+# TODO: Update auth mechanism once Materialize private registry is set up.
+resource "kubernetes_namespace" "ory" {
+  metadata {
+    name = "ory"
+  }
+
+  depends_on = [module.eks]
+}
+
+resource "kubernetes_secret" "ory_oel_registry" {
+  metadata {
+    name      = "ory-oel-registry"
+    namespace = kubernetes_namespace.ory.metadata[0].name
+  }
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  data = {
+    ".dockerconfigjson" = jsonencode({
+      auths = {
+        "europe-docker.pkg.dev" = {
+          auth = base64encode("_json_key:${file(var.ory_oel_key_file)}")
+        }
+      }
+    })
+  }
+}
+
 module "ory_kratos" {
   source = "../../../kubernetes/modules/ory-kratos"
 
-  namespace = "ory"
-  dsn       = local.ory_kratos_dsn
+  namespace        = "ory"
+  create_namespace = false
+  dsn              = local.ory_kratos_dsn
+
+  # OEL image — registry must be part of repository (Ory Helm chart ignores image.registry)
+  image_repository   = "${var.ory_oel_registry}/ory-enterprise-kratos/kratos-oel"
+  image_tag          = var.ory_oel_image_tag
+  image_pull_secrets = ["ory-oel-registry"]
 
   node_selector = local.generic_node_labels
 
@@ -606,18 +640,24 @@ module "ory_kratos" {
     module.ory_kratos_database,
     module.nodepool_generic,
     module.coredns,
+    kubernetes_secret.ory_oel_registry,
+    kubernetes_namespace.ory,
   ]
 }
 
 module "ory_hydra" {
   source = "../../../kubernetes/modules/ory-hydra"
 
-  namespace = "ory"
-  # Share the namespace already created by Kratos
+  namespace        = "ory"
   create_namespace = false
 
   dsn        = local.ory_hydra_dsn
   issuer_url = var.ory_issuer_url
+
+  # OEL image — registry must be part of repository (Ory Helm chart ignores image.registry)
+  image_repository   = "${var.ory_oel_registry}/ory-enterprise/hydra-oel"
+  image_tag          = var.ory_oel_image_tag
+  image_pull_secrets = ["ory-oel-registry"]
 
   # Point Hydra login/consent flows to Kratos
   login_url   = "${module.ory_kratos.public_url}/self-service/login/browser"
@@ -632,6 +672,7 @@ module "ory_hydra" {
     module.ory_kratos,
     module.nodepool_generic,
     module.coredns,
+    kubernetes_secret.ory_oel_registry,
   ]
 }
 
