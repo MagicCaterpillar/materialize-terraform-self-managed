@@ -80,3 +80,21 @@ variable "ory_issuer_url" {
   description = "The public URL of the OAuth2 issuer (Hydra). Used for OIDC discovery. Example: https://auth.example.com/"
   type        = string
 }
+
+variable "ory_oel_registry" {
+  description = "Base registry URL for Ory Enterprise License images. Example: europe-docker.pkg.dev/ory-artifacts"
+  type        = string
+}
+
+variable "ory_oel_image_tag" {
+  description = "Image tag for OEL images."
+  type        = string
+  default     = "26.2.3"
+}
+
+# TODO: Update auth mechanism once Materialize private registry is set up.
+# Currently uses a GCP service account key file for Ory's Artifact Registry.
+variable "ory_oel_key_file" {
+  description = "Path to the GCP service account JSON key file for pulling OEL images from Ory's Artifact Registry."
+  type        = string
+}
