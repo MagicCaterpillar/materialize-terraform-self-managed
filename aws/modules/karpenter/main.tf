@@ -130,7 +130,8 @@ resource "aws_cloudwatch_event_target" "state_change_interruption" {
 # Node IAM
 ####################################################
 resource "aws_iam_role" "node" {
-  name = "${var.name_prefix}-node"
+  name                 = "${var.name_prefix}-node"
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -266,7 +267,8 @@ resource "aws_iam_policy" "karpenter_controller" {
 }
 
 resource "aws_iam_role" "karpenter_controller" {
-  name = "${var.name_prefix}-karpenter-controller"
+  name                 = "${var.name_prefix}-karpenter-controller"
+  permissions_boundary = var.iam_permissions_boundary
   assume_role_policy = jsonencode(
     {
       "Version" : "2012-10-17",

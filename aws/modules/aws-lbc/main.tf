@@ -255,8 +255,9 @@ EOF
 }
 
 resource "aws_iam_role" "aws_load_balancer_controller" {
-  name = "${var.name_prefix}-${var.iam_name}"
-  tags = var.tags
+  name                 = "${var.name_prefix}-${var.iam_name}"
+  permissions_boundary = var.iam_permissions_boundary
+  tags                 = var.tags
   assume_role_policy = jsonencode(
     {
       Version : "2012-10-17",

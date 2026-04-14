@@ -58,5 +58,7 @@ module "eks" {
   # expected length of name_prefix to be in the range (1 - 38)
   iam_role_use_name_prefix = var.iam_role_use_name_prefix
 
+  iam_role_permissions_boundary = var.iam_permissions_boundary
+
   tags = var.tags
 }

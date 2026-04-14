@@ -139,6 +139,8 @@ module "node_group" {
   # expected length of name_prefix to be in the range (1 - 38)
   iam_role_use_name_prefix = var.iam_role_use_name_prefix
 
+  iam_role_permissions_boundary = var.iam_permissions_boundary
+
   launch_template_name = var.launch_template_name
 
   bootstrap_extra_args = var.swap_enabled ? local.swap_bootstrap_args : ""

@@ -84,3 +84,9 @@ variable "service_account_name" {
   type        = string
   nullable    = false
 }
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the IAM permissions boundary to attach to all IAM roles created by this module. Required for BYOC deployments."
+  type        = string
+  default     = null
+}

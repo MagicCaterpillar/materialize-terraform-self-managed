@@ -214,8 +214,9 @@ resource "aws_iam_policy" "ebs_csi_driver" {
 
 # IAM role for EBS CSI driver with OIDC trust
 resource "aws_iam_role" "ebs_csi_driver" {
-  name = "${var.name_prefix}-ebs-csi-driver"
-  tags = var.tags
+  name                 = "${var.name_prefix}-ebs-csi-driver"
+  permissions_boundary = var.iam_permissions_boundary
+  tags                 = var.tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

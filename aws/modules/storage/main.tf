@@ -68,7 +68,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "materialize_storage" {
 
 # IAM Role for Service Account (IRSA) to access S3 bucket
 resource "aws_iam_role" "materialize_s3" {
-  name = "${var.name_prefix}-mz-role"
+  name                 = "${var.name_prefix}-mz-role"
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

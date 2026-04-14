@@ -48,8 +48,9 @@ resource "terraform_data" "annotate_existing_resources" {
 
 # IAM role for VPC CNI with OIDC trust
 resource "aws_iam_role" "vpc_cni" {
-  name = "${var.name_prefix}-vpc-cni"
-  tags = var.tags
+  name                 = "${var.name_prefix}-vpc-cni"
+  permissions_boundary = var.iam_permissions_boundary
+  tags                 = var.tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
