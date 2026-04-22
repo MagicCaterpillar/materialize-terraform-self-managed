@@ -76,11 +76,6 @@ variable "enable_observability" {
 }
 
 # Ory variables
-variable "ory_issuer_url" {
-  description = "The public URL of the OAuth2 issuer (Hydra). Used for OIDC discovery. Example: https://auth.example.com/"
-  type        = string
-}
-
 variable "ory_oel_registry" {
   description = "Base registry URL for Ory Enterprise License images. Example: europe-docker.pkg.dev/ory-artifacts"
   type        = string
