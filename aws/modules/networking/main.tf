@@ -17,6 +17,13 @@ module "vpc" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
+  # Adopt the AWS-default network ACL and apply our tags so that the BYOC
+  # permissions boundary's ResourceTag-gated allow for `ec2:Delete*` (and
+  # `ec2:*NetworkAclEntry`) matches at destroy time.  Upstream defaults
+  # `manage_default_network_acl` to false, which leaves the ACL untagged
+  # and destroy calls fail with UnauthorizedOperation.
+  manage_default_network_acl = true
+
   # needed for EKS Cluster private endpoint
   # https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html#cluster-endpoint-private
   enable_dhcp_options              = true
