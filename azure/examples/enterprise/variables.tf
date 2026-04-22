@@ -98,3 +98,32 @@ variable "ory_oel_key_file" {
   description = "Path to the GCP service account JSON key file for pulling OEL images from Ory's Artifact Registry."
   type        = string
 }
+
+variable "ory_hydra_hostname" {
+  description = "External hostname for the Hydra OAuth2 public API. Used as the OIDC issuer URL. Example: hydra.internal.example.com"
+  type        = string
+}
+
+variable "ory_ui_hostname" {
+  description = "External hostname for the Ory selfservice UI (login/consent pages). Example: auth.internal.example.com"
+  type        = string
+}
+
+variable "ory_kratos_hostname" {
+  description = "External hostname for the Kratos public API. Kratos flows return browser-facing URLs using this hostname. Example: kratos.internal.example.com"
+  type        = string
+}
+
+variable "materialize_console_hostname" {
+  description = "External hostname for the Materialize console. Used to construct the OAuth2 redirect URI. Example: materialize.internal.example.com"
+  type        = string
+}
+
+variable "ory_cert_issuer_ref" {
+  description = "cert-manager ClusterIssuer to use for Hydra and selfservice UI TLS certs. Defaults to the self-signed cluster issuer created in this example. For production, override with a ClusterIssuer backed by your organization's CA or Let's Encrypt."
+  type = object({
+    name = string
+    kind = string
+  })
+  default = null
+}
