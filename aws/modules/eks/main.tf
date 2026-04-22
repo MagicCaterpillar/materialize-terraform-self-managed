@@ -54,6 +54,16 @@ module "eks" {
   # To add the current caller identity as an administrator
   enable_cluster_creator_admin_permissions = var.enable_cluster_creator_admin_permissions
 
+  # pulumi-terraform-module serialises unset list inputs as null, which
+  # the upstream `kms` submodule's `aws_iam_policy_document.this` rejects
+  # ("Null values are not allowed").  Pass explicit empty lists so KMS
+  # envelope encryption for k8s secrets stays enabled.
+  kms_key_administrators            = []
+  kms_key_users                     = []
+  kms_key_service_users             = []
+  kms_key_source_policy_documents   = []
+  kms_key_override_policy_documents = []
+
   # useful to disable this when prefix might be too long and hit following char limit
   # expected length of name_prefix to be in the range (1 - 38)
   iam_role_use_name_prefix = var.iam_role_use_name_prefix
