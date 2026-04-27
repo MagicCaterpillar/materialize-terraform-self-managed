@@ -53,4 +53,5 @@ No modules.
 | <a name="output_database_names"></a> [database\_names](#output\_database\_names) | List of database names |
 | <a name="output_databases"></a> [databases](#output\_databases) | Map of created databases |
 | <a name="output_server_fqdn"></a> [server\_fqdn](#output\_server\_fqdn) | The FQDN of the PostgreSQL server |
+| <a name="output_server_id"></a> [server\_id](#output\_server\_id) | The ID of the PostgreSQL server |
 | <a name="output_server_name"></a> [server\_name](#output\_server\_name) | The name of the PostgreSQL server |
