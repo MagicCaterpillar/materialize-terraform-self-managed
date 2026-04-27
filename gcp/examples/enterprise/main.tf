@@ -183,13 +183,20 @@ locals {
   # sibling subdomains (Kratos, selfservice UI, Hydra).
   cookie_parent_domain = join(".", slice(split(".", var.ory_kratos_hostname), 1, length(split(".", var.ory_kratos_hostname))))
 
-  # cert-manager ClusterIssuer used to sign the Ory TLS certs. Defaults to the
-  # self-signed cluster issuer created in this example. Override via var.ory_cert_issuer_ref
-  # for production (e.g., a corporate CA or Let's Encrypt).
-  ory_cert_issuer = var.ory_cert_issuer_ref != null ? var.ory_cert_issuer_ref : {
-    name = module.self_signed_cluster_issuer.issuer_name
-    kind = "ClusterIssuer"
-  }
+  # cert-manager ClusterIssuer used for every TLS certificate in this example
+  # (Materialize console/balancerd/internal, Hydra, Kratos, selfservice UI).
+  # Resolution order:
+  #   1. var.cert_issuer_ref if set (bring-your-own corporate CA, etc.)
+  #   2. Let's Encrypt issuer when var.enable_letsencrypt = true
+  #   3. Built-in self-signed issuer (the demo default)
+  cert_issuer = var.cert_issuer_ref != null ? var.cert_issuer_ref : (
+    var.enable_letsencrypt
+    ? module.letsencrypt_cluster_issuer[0].issuer_ref
+    : {
+      name = module.self_signed_cluster_issuer[0].issuer_name
+      kind = "ClusterIssuer"
+    }
+  )
 
   # GCP annotations for the LoadBalancer services fronting Ory (Hydra public,
   # Kratos public, selfservice UI) and the Materialize console. Internal LBs use
@@ -358,10 +365,32 @@ module "cert_manager" {
   ]
 }
 
+# Issuer modes:
+#   - var.cert_issuer_ref set        → no module created here, customer brings their own
+#   - var.enable_letsencrypt = true  → letsencrypt_cluster_issuer module
+#   - otherwise (demo default)       → self_signed_cluster_issuer module
 module "self_signed_cluster_issuer" {
+  count  = var.cert_issuer_ref == null && !var.enable_letsencrypt ? 1 : 0
   source = "../../../kubernetes/modules/self-signed-cluster-issuer"
 
   name_prefix = var.name_prefix
+
+  depends_on = [
+    module.cert_manager,
+  ]
+}
+
+module "letsencrypt_cluster_issuer" {
+  count  = var.cert_issuer_ref == null && var.enable_letsencrypt ? 1 : 0
+  source = "../../../kubernetes/modules/letsencrypt-cluster-issuer"
+
+  name             = "${var.name_prefix}-letsencrypt-${var.letsencrypt_acme_environment}"
+  email            = var.letsencrypt_email
+  acme_environment = var.letsencrypt_acme_environment
+  dns_provider     = var.letsencrypt_dns_provider
+  dns_zones        = var.letsencrypt_dns_zones
+
+  cloudflare_api_token = var.cloudflare_api_token
 
   depends_on = [
     module.cert_manager,
@@ -458,10 +487,7 @@ module "materialize_instance" {
 
   license_key = var.license_key
 
-  issuer_ref = {
-    name = module.self_signed_cluster_issuer.issuer_name
-    kind = "ClusterIssuer"
-  }
+  issuer_ref = local.cert_issuer
 
   # Include the external console hostname in the cert so browsers accept it.
   console_extra_dns_names   = [var.materialize_console_hostname]
@@ -486,6 +512,7 @@ module "materialize_instance" {
     module.storage,
     module.networking,
     module.self_signed_cluster_issuer,
+    module.letsencrypt_cluster_issuer,
     module.operator,
     module.materialize_nodepool,
     module.coredns,
@@ -723,12 +750,13 @@ resource "kubectl_manifest" "hydra_certificate" {
         var.ory_hydra_hostname,
         "hydra-public.ory.svc.cluster.local",
       ]
-      issuerRef = local.ory_cert_issuer
+      issuerRef = local.cert_issuer
     }
   })
 
   depends_on = [
     module.self_signed_cluster_issuer,
+    module.letsencrypt_cluster_issuer,
     kubernetes_namespace.ory,
   ]
 }
@@ -749,12 +777,13 @@ resource "kubectl_manifest" "kratos_certificate" {
         var.ory_kratos_hostname,
         "kratos-public.ory.svc.cluster.local",
       ]
-      issuerRef = local.ory_cert_issuer
+      issuerRef = local.cert_issuer
     }
   })
 
   depends_on = [
     module.self_signed_cluster_issuer,
+    module.letsencrypt_cluster_issuer,
     kubernetes_namespace.ory,
   ]
 }
@@ -770,12 +799,13 @@ resource "kubectl_manifest" "ui_certificate" {
     spec = {
       secretName = "ory-selfservice-ui-tls"
       dnsNames   = [var.ory_ui_hostname]
-      issuerRef  = local.ory_cert_issuer
+      issuerRef  = local.cert_issuer
     }
   })
 
   depends_on = [
     module.self_signed_cluster_issuer,
+    module.letsencrypt_cluster_issuer,
     kubernetes_namespace.ory,
   ]
 }
