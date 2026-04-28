@@ -113,61 +113,10 @@ variable "materialize_console_hostname" {
 }
 
 variable "cert_issuer_ref" {
-  description = "Bring-your-own cert-manager ClusterIssuer used for all TLS certificates in this example (Materialize console/balancerd/internal, Hydra, Kratos, selfservice UI). When null, the example creates either the built-in self-signed issuer (default) or a Let's Encrypt issuer (when var.enable_letsencrypt = true)."
+  description = "Bring-your-own cert-manager (Cluster)Issuer used to sign the browser-facing TLS certs (Materialize console / balancerd, Hydra, Kratos, selfservice UI). When null, the example falls back to the built-in self-signed issuer for browser-facing certs (the demo path). The internal mTLS cert (with *.cluster.local SANs) always uses the self-signed cluster issuer because public ACME issuers like Let's Encrypt cannot sign cluster.local. See the README for an example of plugging in a Let's Encrypt + Cloudflare DNS-01 issuer."
   type = object({
     name = string
     kind = string
   })
   default = null
-}
-
-variable "enable_letsencrypt" {
-  description = "When true, the example provisions a Let's Encrypt ClusterIssuer (via var.letsencrypt_dns_provider for the ACME dns-01 challenge) and uses it for all TLS certs. Requires real DNS pointed at the LB IPs in var.letsencrypt_dns_zones. Ignored when var.cert_issuer_ref is set."
-  type        = bool
-  default     = false
-  nullable    = false
-}
-
-variable "letsencrypt_email" {
-  description = "Contact email for Let's Encrypt account registration. Required when var.enable_letsencrypt = true."
-  type        = string
-  default     = null
-}
-
-variable "letsencrypt_acme_environment" {
-  description = "Let's Encrypt environment. 'staging' avoids the production rate limits while iterating but issues untrusted certs; 'production' issues browser-trusted certs. Default is staging so first applies don't burn the production rate-limit budget."
-  type        = string
-  default     = "staging"
-  nullable    = false
-
-  validation {
-    condition     = contains(["staging", "production"], var.letsencrypt_acme_environment)
-    error_message = "letsencrypt_acme_environment must be 'staging' or 'production'."
-  }
-}
-
-variable "letsencrypt_dns_provider" {
-  description = "DNS provider used to satisfy ACME dns-01 challenges. Currently only 'cloudflare' is supported."
-  type        = string
-  default     = "cloudflare"
-  nullable    = false
-
-  validation {
-    condition     = contains(["cloudflare"], var.letsencrypt_dns_provider)
-    error_message = "letsencrypt_dns_provider must be 'cloudflare'."
-  }
-}
-
-variable "letsencrypt_dns_zones" {
-  description = "DNS zones (apex domains) the Let's Encrypt issuer is allowed to solve challenges for. Required when var.enable_letsencrypt = true. Example: [\"example.com\"] when your hostnames are like console.example.com or hydra.mz.example.com."
-  type        = list(string)
-  default     = []
-  nullable    = false
-}
-
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token with Zone:Read and DNS:Edit permission scoped to var.letsencrypt_dns_zones. Required when var.enable_letsencrypt = true and var.letsencrypt_dns_provider = 'cloudflare'. Create at https://dash.cloudflare.com/profile/api-tokens."
-  type        = string
-  default     = null
-  sensitive   = true
 }

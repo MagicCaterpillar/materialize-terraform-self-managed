@@ -102,13 +102,16 @@ curl http://localhost:4445/health/ready
 
 ## TLS Certificates
 
-cert-manager provisions every TLS certificate in this stack (Materialize console / balancerd / internal, Hydra, Kratos, selfservice UI). The example offers three issuer modes; only one is active per apply.
+cert-manager provisions every TLS certificate in this stack. The example uses two issuers:
 
-### Default — self-signed (demo / air-gapped)
+- An always-created in-cluster **self-signed** `ClusterIssuer` for the internal mTLS cert (which has `*.cluster.local` SANs that public ACME issuers like Let's Encrypt cannot sign).
+- A configurable issuer for the browser-facing certs (Materialize console / balancerd, Hydra, Kratos, selfservice UI). Defaults to the same self-signed issuer; override via `var.cert_issuer_ref` to plug in a real one (corporate CA, Let's Encrypt, etc.).
 
-No tfvars required. The example creates an in-cluster self-signed `ClusterIssuer` and a root CA. **Browsers will not trust the cert** and the user will see warnings.
+### Default: self-signed for everything (demo / air-gapped)
 
-This mode also requires environmentd to trust the cluster CA when fetching JWKS from Hydra. Patch the Materialize CR (or set this in your TF):
+No tfvars required. **Browsers will not trust the cert** and users will see warnings.
+
+This mode requires environmentd to trust the cluster CA when fetching JWKS from Hydra. Patch the Materialize CR (or set this through the `materialize-instance` module):
 
 ```yaml
 spec:
@@ -119,37 +122,7 @@ spec:
 
 Use this mode for offline demos or air-gapped clusters where no real domain or DNS provider is available.
 
-### Let's Encrypt — recommended for prod-like demos
-
-Set the following tfvars:
-
-```hcl
-enable_letsencrypt           = true
-letsencrypt_email            = "you@example.com"
-letsencrypt_acme_environment = "staging"   # flip to "production" once stable
-letsencrypt_dns_provider     = "cloudflare"
-letsencrypt_dns_zones        = ["example.com"]
-cloudflare_api_token         = "..."
-```
-
-The example provisions a `ClusterIssuer` that satisfies ACME `dns-01` challenges via Cloudflare. Certs are browser-trusted; no `SSL_CERT_FILE` patch needed.
-
-**Cloudflare token setup:**
-
-1. Add your domain to Cloudflare DNS (the apex zone, e.g. `example.com`).
-2. Visit https://dash.cloudflare.com/profile/api-tokens → Create Token → "Edit zone DNS" template.
-3. Permissions: `Zone:DNS:Edit`, `Zone:Zone:Read`. Zone Resources: limit to the zones in `letsencrypt_dns_zones`.
-4. Put the token into `cloudflare_api_token` in your tfvars (the file is gitignored).
-
-**Staging vs. production:**
-
-Default is `staging` to avoid burning the production rate-limit budget (50 certs/week per registered domain) while iterating. Staging certs come from an untrusted CA so browsers warn. Switch `letsencrypt_acme_environment = "production"` once DNS, hostnames, and rotation behavior are settled.
-
-**DNS records (after `terraform apply`):**
-
-Read the LB IPs from `terraform output` (or `kubectl get svc -A`) and create A records in Cloudflare for the four hostnames you set in tfvars (`ory_hydra_hostname`, `ory_ui_hostname`, `ory_kratos_hostname`, `materialize_console_hostname`). cert-manager issues certs once DNS resolves (1–2 min for the first issuance).
-
-### Bring your own — corporate CA, existing Let's Encrypt setup, …
+### Bring your own browser-facing issuer
 
 Set:
 
@@ -160,7 +133,81 @@ cert_issuer_ref = {
 }
 ```
 
-Both `enable_letsencrypt` and the self-signed default are skipped; nothing is provisioned by this example. Useful when an existing `ClusterIssuer` is already in the cluster (e.g. backed by your corporate PKI, trust-manager, or a cluster-scoped Let's Encrypt setup).
+The browser-facing certs use this issuer; the internal mTLS cert continues to use the self-signed cluster issuer. Customers typically bring a corporate CA, an existing trust-manager bundle, or an ACME issuer (Let's Encrypt) backed by their preferred DNS-01 / HTTP-01 solver.
+
+#### Example: Let's Encrypt with Cloudflare DNS-01
+
+If you don't already have a `ClusterIssuer` in the cluster, here's a copyable starting point. Drop into your root module, customize, then point `cert_issuer_ref` at it. The same pattern works with any cert-manager solver: swap the `solvers` block for Route53, Azure DNS, Cloud DNS, HTTP-01, etc.
+
+```hcl
+# Cloudflare API token with Zone:Read + DNS:Edit on the zones you'll request
+# certs for. Create at https://dash.cloudflare.com/profile/api-tokens.
+variable "cloudflare_api_token" {
+  type      = string
+  sensitive = true
+}
+
+resource "kubernetes_secret_v1" "cloudflare_api_token" {
+  metadata {
+    name      = "cloudflare-api-token"
+    namespace = "cert-manager"
+  }
+  data = {
+    "api-token" = var.cloudflare_api_token
+  }
+}
+
+resource "kubectl_manifest" "letsencrypt_prod" {
+  yaml_body = yamlencode({
+    apiVersion = "cert-manager.io/v1"
+    kind       = "ClusterIssuer"
+    metadata = {
+      name = "letsencrypt-prod"
+    }
+    spec = {
+      acme = {
+        # While iterating, point at the staging server to avoid the production
+        # rate limit (50 certs / week / registered domain). Staging certs are
+        # not browser-trusted; switch back once the integration is stable.
+        # server = "https://acme-staging-v02.api.letsencrypt.org/directory"
+        server = "https://acme-v02.api.letsencrypt.org/directory"
+        email  = "you@example.com"
+        privateKeySecretRef = {
+          name = "letsencrypt-prod-account-key"
+        }
+        solvers = [{
+          selector = {
+            dnsZones = ["example.com"]
+          }
+          dns01 = {
+            cloudflare = {
+              apiTokenSecretRef = {
+                name = kubernetes_secret_v1.cloudflare_api_token.metadata[0].name
+                key  = "api-token"
+              }
+            }
+          }
+        }]
+      }
+    }
+  })
+
+  depends_on = [kubernetes_secret_v1.cloudflare_api_token]
+}
+
+module "materialize_enterprise" {
+  source = "..."
+
+  cert_issuer_ref = {
+    name = "letsencrypt-prod"
+    kind = "ClusterIssuer"
+  }
+
+  # ...rest of the example variables
+}
+```
+
+After `terraform apply`, create A records for your hostnames (Hydra, Kratos, selfservice UI, Materialize console) pointing at the LB IPs. cert-manager issues certs once DNS resolves (typically 1 to 2 minutes for the first issuance).
 
 ---
 
