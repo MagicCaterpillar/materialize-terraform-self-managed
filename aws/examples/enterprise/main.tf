@@ -284,34 +284,13 @@ module "cert_manager" {
   ]
 }
 
-# Issuer modes:
-#   - var.cert_issuer_ref set       → no module created here, customer brings their own
-#   - var.enable_letsencrypt = true → letsencrypt_cluster_issuer for external certs +
-#                                     self_signed_cluster_issuer for internal mTLS
-#                                     (LE cannot sign *.cluster.local)
-#   - otherwise (demo default)      → self_signed_cluster_issuer for everything
+# Always-created self-signed cluster issuer. Used for the internal mTLS cert
+# spec (which has *.cluster.local SANs that public ACME issuers reject) and as
+# the default for the browser-facing certs when var.cert_issuer_ref is null.
 module "self_signed_cluster_issuer" {
-  count  = var.cert_issuer_ref == null ? 1 : 0
   source = "../../../kubernetes/modules/self-signed-cluster-issuer"
 
   name_prefix = var.name_prefix
-
-  depends_on = [
-    module.cert_manager,
-  ]
-}
-
-module "letsencrypt_cluster_issuer" {
-  count  = var.cert_issuer_ref == null && var.enable_letsencrypt ? 1 : 0
-  source = "../../../kubernetes/modules/letsencrypt-cluster-issuer"
-
-  name             = "${var.name_prefix}-letsencrypt-${var.letsencrypt_acme_environment}"
-  email            = var.letsencrypt_email
-  acme_environment = var.letsencrypt_acme_environment
-  dns_provider     = var.letsencrypt_dns_provider
-  dns_zones        = var.letsencrypt_dns_zones
-
-  cloudflare_api_token = var.cloudflare_api_token
 
   depends_on = [
     module.cert_manager,
@@ -515,7 +494,6 @@ module "materialize_instance" {
     module.storage,
     module.networking,
     module.self_signed_cluster_issuer,
-    module.letsencrypt_cluster_issuer,
     module.operator,
     module.aws_lbc,
     module.nodepool_materialize,
@@ -785,14 +763,15 @@ resource "kubectl_manifest" "hydra_certificate" {
     }
     spec = {
       secretName = "hydra-tls"
-      # The external hostname covers browser traffic. The cluster-internal SAN is
-      # only included when the issuer is private (self-signed) — public ACME
-      # issuers (Let's Encrypt) reject .cluster.local because it isn't a valid
-      # public suffix. In LE mode, in-cluster clients reach Hydra by its public
-      # hostname (hairpin NAT through the LB) and TLS still validates.
+      # The external hostname covers browser traffic. The cluster-internal SAN
+      # is only included with the default self-signed issuer (which can sign
+      # cluster.local). When var.cert_issuer_ref is set we assume the customer
+      # may be using a public ACME issuer that rejects .cluster.local, so we
+      # drop the SAN and route in-cluster clients to Hydra via the public
+      # hostname (hairpin NAT through the LB; TLS still validates).
       dnsNames = concat(
         [var.ory_hydra_hostname],
-        var.enable_letsencrypt ? [] : ["hydra-public.ory.svc.cluster.local"],
+        var.cert_issuer_ref != null ? [] : ["hydra-public.ory.svc.cluster.local"],
       )
       issuerRef = local.cert_issuer
     }
@@ -800,7 +779,6 @@ resource "kubectl_manifest" "hydra_certificate" {
 
   depends_on = [
     module.self_signed_cluster_issuer,
-    module.letsencrypt_cluster_issuer,
     kubernetes_namespace.ory,
   ]
 }
@@ -815,14 +793,10 @@ resource "kubectl_manifest" "kratos_certificate" {
     }
     spec = {
       secretName = "kratos-tls"
-      # The external hostname covers browser traffic. The cluster-internal SAN is
-      # only included when the issuer is private (self-signed) — public ACME
-      # issuers (Let's Encrypt) reject .cluster.local because it isn't a valid
-      # public suffix. In LE mode, the selfservice UI reaches Kratos by its public
-      # hostname (hairpin NAT through the LB) and TLS still validates.
+      # See the equivalent comment on hydra_certificate above. Same trade-off.
       dnsNames = concat(
         [var.ory_kratos_hostname],
-        var.enable_letsencrypt ? [] : ["kratos-public.ory.svc.cluster.local"],
+        var.cert_issuer_ref != null ? [] : ["kratos-public.ory.svc.cluster.local"],
       )
       issuerRef = local.cert_issuer
     }
@@ -830,7 +804,6 @@ resource "kubectl_manifest" "kratos_certificate" {
 
   depends_on = [
     module.self_signed_cluster_issuer,
-    module.letsencrypt_cluster_issuer,
     kubernetes_namespace.ory,
   ]
 }
@@ -852,7 +825,6 @@ resource "kubectl_manifest" "ui_certificate" {
 
   depends_on = [
     module.self_signed_cluster_issuer,
-    module.letsencrypt_cluster_issuer,
     kubernetes_namespace.ory,
   ]
 }
@@ -863,11 +835,12 @@ module "ory_selfservice_ui" {
   source = "../../../kubernetes/modules/ory-selfservice-ui"
 
   namespace = "ory"
-  # Server-side calls from the UI pod to Kratos's public API. With a private
-  # issuer we can use the cluster service URL (cert SAN covers cluster.local).
-  # With LE the cert only has the external hostname, so route through it
-  # (resolves to the LB IP via public DNS and hairpins back into the cluster).
-  kratos_public_url = var.enable_letsencrypt ? local.kratos_external_url : module.ory_kratos.public_url
+  # Server-side calls from the UI pod to Kratos's public API. With the default
+  # self-signed issuer the cert covers the cluster service URL, so we use it
+  # directly. With var.cert_issuer_ref set the cert may only have the external
+  # hostname, so we route through it (resolves to the LB IP via public DNS and
+  # hairpins back into the cluster).
+  kratos_public_url = var.cert_issuer_ref != null ? local.kratos_external_url : module.ory_kratos.public_url
   kratos_admin_url  = module.ory_kratos.admin_url
   # Browser-facing Kratos URL (used when the UI returns redirects or form actions).
   kratos_browser_url = local.kratos_external_url
@@ -1272,25 +1245,20 @@ locals {
   cookie_parent_domain = join(".", slice(split(".", var.ory_kratos_hostname), 1, length(split(".", var.ory_kratos_hostname))))
 
   # cert-manager ClusterIssuer used for browser-facing TLS certs (Materialize
-  # console/balancerd, Hydra, Kratos, selfservice UI). Resolution order:
-  #   1. var.cert_issuer_ref if set (bring-your-own corporate CA, etc.)
-  #   2. Let's Encrypt issuer when var.enable_letsencrypt = true
-  #   3. Built-in self-signed issuer (the demo default)
-  cert_issuer = var.cert_issuer_ref != null ? var.cert_issuer_ref : (
-    var.enable_letsencrypt
-    ? module.letsencrypt_cluster_issuer[0].issuer_ref
-    : {
-      name = module.self_signed_cluster_issuer[0].issuer_name
-      kind = "ClusterIssuer"
-    }
-  )
+  # console/balancerd, Hydra, Kratos, selfservice UI). Defaults to the built-in
+  # self-signed issuer; override via var.cert_issuer_ref to plug in a real
+  # issuer (corporate CA, Let's Encrypt, etc.). See the README for a Let's
+  # Encrypt + Cloudflare DNS-01 example.
+  cert_issuer = var.cert_issuer_ref != null ? var.cert_issuer_ref : {
+    name = module.self_signed_cluster_issuer.issuer_name
+    kind = "ClusterIssuer"
+  }
 
   # Internal cert issuer for the Materialize CR's internalCertificateSpec, which
   # has cluster.local SANs that public ACME issuers (Let's Encrypt) can't sign.
-  # Always uses the self-signed cluster issuer, except when the customer brings
-  # their own ClusterIssuer (which is then assumed to handle cluster.local too).
-  internal_cert_issuer = var.cert_issuer_ref != null ? var.cert_issuer_ref : {
-    name = module.self_signed_cluster_issuer[0].issuer_name
+  # Always uses the self-signed cluster issuer regardless of cert_issuer_ref.
+  internal_cert_issuer = {
+    name = module.self_signed_cluster_issuer.issuer_name
     kind = "ClusterIssuer"
   }
 
