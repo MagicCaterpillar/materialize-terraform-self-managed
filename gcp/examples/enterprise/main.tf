@@ -658,6 +658,12 @@ module "ory_kratos" {
     }
   }
 
+  # Optional upstream OIDC providers (Okta, Entra, Auth0, Google, etc.) exposed
+  # as social sign-in buttons on the selfservice UI. Defaults to [] (password-
+  # only login). Each entry's redirect URI is registered at the upstream IdP as
+  # https://<ory_kratos_hostname>/self-service/methods/oidc/callback/<id>.
+  upstream_oidc_providers = var.upstream_oidc_providers
+
   depends_on = [
     module.gke,
     module.ory_database,
