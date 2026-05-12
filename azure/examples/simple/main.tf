@@ -284,7 +284,7 @@ module "coredns" {
   source             = "../../../kubernetes/modules/coredns"
   node_selector      = local.generic_node_labels
   kubeconfig_data    = module.aks.kube_config_raw
-  cluster_identifier = module.aks.cluster_id
+  cluster_identifier = module.aks.cluster_name
   depends_on = [
     module.aks,
     module.networking,

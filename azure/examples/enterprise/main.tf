@@ -156,32 +156,22 @@ locals {
     "hydra"
   )
 
-  # External URLs for Ory components. These are what the browser (and Materialize, for
-  # issuer matching) sees. Customer-provided hostnames resolve to the LoadBalancer IPs
-  # and are terminated by TLS certs issued by cert-manager.
+  ory_namespace = "ory"
+
+  # External URLs for Ory components. These are what the browser (and Materialize,
+  # for issuer matching) sees. Customer-provided hostnames resolve to the
+  # LoadBalancer IPs and are terminated by TLS certs issued by cert-manager.
   hydra_external_url  = "https://${var.ory_hydra_hostname}/"
   ui_external_url     = "https://${var.ory_ui_hostname}"
   kratos_external_url = "https://${var.ory_kratos_hostname}"
 
-  # Parent domain shared by all Ory hostnames (the part after the first label).
-  # Used as the cookie domain so flow/session cookies are shared across
-  # sibling subdomains (Kratos, selfservice UI, Hydra).
-  cookie_parent_domain = join(".", slice(split(".", var.ory_kratos_hostname), 1, length(split(".", var.ory_kratos_hostname))))
+  # Parent domain shared by all Ory hostnames. Used as the cookie domain so
+  # flow/session cookies work across sibling subdomains (Kratos, UI, Hydra).
+  cookie_parent_domain = regex("^[^.]+\\.(.+)$", var.ory_kratos_hostname)[0]
 
-  # cert-manager ClusterIssuer used for browser-facing TLS certs (Materialize
-  # console/balancerd, Hydra, Kratos, selfservice UI). Defaults to the built-in
-  # self-signed issuer; override via var.cert_issuer_ref to plug in a real
-  # issuer (corporate CA, Let's Encrypt, etc.). See the README for a Let's
-  # Encrypt + Cloudflare DNS-01 example.
+  # cert-manager ClusterIssuer for browser-facing TLS. Defaults to the built-in
+  # self-signed issuer; override via var.cert_issuer_ref to plug in a real one.
   cert_issuer = var.cert_issuer_ref != null ? var.cert_issuer_ref : {
-    name = module.self_signed_cluster_issuer.issuer_name
-    kind = "ClusterIssuer"
-  }
-
-  # Internal cert issuer for the Materialize CR's internalCertificateSpec, which
-  # has cluster.local SANs that public ACME issuers (Let's Encrypt) can't sign.
-  # Always uses the self-signed cluster issuer regardless of cert_issuer_ref.
-  internal_cert_issuer = {
     name = module.self_signed_cluster_issuer.issuer_name
     kind = "ClusterIssuer"
   }
@@ -388,7 +378,7 @@ module "coredns" {
   source             = "../../../kubernetes/modules/coredns"
   node_selector      = local.generic_node_labels
   kubeconfig_data    = module.aks.kube_config_raw
-  cluster_identifier = module.aks.cluster_id
+  cluster_identifier = module.aks.cluster_name
   depends_on = [
     module.aks,
     module.networking,
@@ -507,9 +497,12 @@ module "materialize_instance" {
   license_key = var.license_key
 
   issuer_ref = local.cert_issuer
-  # Internal mTLS uses cluster.local SANs which a public ACME issuer can't sign,
-  # so always route the internal cert spec through the private (self-signed) CA.
-  internal_issuer_ref = local.internal_cert_issuer
+  # Internal mTLS has cluster.local SANs which public ACME issuers can't sign,
+  # so always route the internal cert spec through the self-signed cluster issuer.
+  internal_issuer_ref = {
+    name = module.self_signed_cluster_issuer.issuer_name
+    kind = "ClusterIssuer"
+  }
 
   # Browser-facing SAN. balancerd is intentionally omitted; see README.
   console_extra_dns_names = [var.materialize_console_hostname]
@@ -570,7 +563,7 @@ resource "kubernetes_network_policy_v1" "materialize_to_ory_egress" {
       to {
         namespace_selector {
           match_labels = {
-            "kubernetes.io/metadata.name" = "ory"
+            "kubernetes.io/metadata.name" = local.ory_namespace
           }
         }
       }
@@ -586,7 +579,7 @@ resource "kubernetes_network_policy_v1" "materialize_to_ory_egress" {
 resource "kubernetes_network_policy_v1" "ory_from_materialize_ingress" {
   metadata {
     name      = "allow-materialize-ingress"
-    namespace = "ory"
+    namespace = local.ory_namespace
   }
 
   spec {
@@ -606,7 +599,7 @@ resource "kubernetes_network_policy_v1" "ory_from_materialize_ingress" {
       from {
         namespace_selector {
           match_labels = {
-            "kubernetes.io/metadata.name" = "ory"
+            "kubernetes.io/metadata.name" = local.ory_namespace
           }
         }
       }
@@ -642,10 +635,9 @@ resource "kubernetes_network_policy_v1" "ory_from_materialize_ingress" {
 # Ory: Identity & OAuth2 (Kratos + Hydra)
 # -----------------------------------------------------------------------------
 
-# TODO: Update auth mechanism once Materialize private registry is set up.
 resource "kubernetes_namespace" "ory" {
   metadata {
-    name = "ory"
+    name = local.ory_namespace
   }
 
   depends_on = [module.aks]
@@ -653,6 +645,8 @@ resource "kubernetes_namespace" "ory" {
 
 # SECURITY: file() embeds the GCP service-account key into Terraform state
 # in plaintext. Treat state as sensitive. See README "Limitations".
+# TODO: Replace with the Materialize-hosted OEL mirror (license-key JWT auth)
+# once it ships, so a customer no longer needs a shared GCP service-account key.
 resource "kubernetes_secret" "ory_oel_registry" {
   metadata {
     name      = "ory-oel-registry"
@@ -675,7 +669,7 @@ resource "kubernetes_secret" "ory_oel_registry" {
 module "ory_kratos" {
   source = "../../../kubernetes/modules/ory-kratos"
 
-  namespace        = "ory"
+  namespace        = local.ory_namespace
   create_namespace = false
   dsn              = local.ory_kratos_dsn
 
@@ -785,79 +779,36 @@ module "ory_kratos" {
     azurerm_postgresql_flexible_server_configuration.ory_extensions,
     kubernetes_secret.ory_oel_registry,
     kubernetes_namespace.ory,
-    kubectl_manifest.kratos_certificate,
+    kubectl_manifest.ory_certificate["kratos-tls"],
   ]
 }
 
-# TLS certificates for Hydra and the selfservice UI, issued by the existing
-# self-signed ClusterIssuer (same one used for Materialize internal TLS).
-resource "kubectl_manifest" "hydra_certificate" {
+# TLS certificates for Hydra, Kratos and the selfservice UI. The optional
+# *.cluster.local SAN is dropped when the customer brings their own
+# (potentially public ACME) issuer that can't sign single-label cluster
+# names; in that case in-cluster callers route via the public hostname
+# (hairpin NAT through the LB; TLS still validates).
+resource "kubectl_manifest" "ory_certificate" {
+  for_each = {
+    hydra-tls              = { hostname = var.ory_hydra_hostname, cluster_svc = "hydra-public.ory.svc.cluster.local" }
+    kratos-tls             = { hostname = var.ory_kratos_hostname, cluster_svc = "kratos-public.ory.svc.cluster.local" }
+    ory-selfservice-ui-tls = { hostname = var.ory_ui_hostname, cluster_svc = null }
+  }
+
   yaml_body = yamlencode({
     apiVersion = "cert-manager.io/v1"
     kind       = "Certificate"
     metadata = {
-      name      = "hydra-tls"
-      namespace = "ory"
+      name      = each.key
+      namespace = local.ory_namespace
     }
     spec = {
-      secretName = "hydra-tls"
-      # The external hostname covers browser traffic. The cluster-internal SAN
-      # is only included with the default self-signed issuer (which can sign
-      # cluster.local). When var.cert_issuer_ref is set we assume the customer
-      # may be using a public ACME issuer that rejects .cluster.local, so we
-      # drop the SAN and route in-cluster clients to Hydra via the public
-      # hostname (hairpin NAT through the LB; TLS still validates).
+      secretName = each.key
       dnsNames = concat(
-        [var.ory_hydra_hostname],
-        var.cert_issuer_ref != null ? [] : ["hydra-public.ory.svc.cluster.local"],
+        [each.value.hostname],
+        var.cert_issuer_ref == null && each.value.cluster_svc != null ? [each.value.cluster_svc] : [],
       )
       issuerRef = local.cert_issuer
-    }
-  })
-
-  depends_on = [
-    module.self_signed_cluster_issuer,
-    kubernetes_namespace.ory,
-  ]
-}
-
-resource "kubectl_manifest" "kratos_certificate" {
-  yaml_body = yamlencode({
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-    metadata = {
-      name      = "kratos-tls"
-      namespace = "ory"
-    }
-    spec = {
-      secretName = "kratos-tls"
-      # See the equivalent comment on hydra_certificate above. Same trade-off.
-      dnsNames = concat(
-        [var.ory_kratos_hostname],
-        var.cert_issuer_ref != null ? [] : ["kratos-public.ory.svc.cluster.local"],
-      )
-      issuerRef = local.cert_issuer
-    }
-  })
-
-  depends_on = [
-    module.self_signed_cluster_issuer,
-    kubernetes_namespace.ory,
-  ]
-}
-
-resource "kubectl_manifest" "ui_certificate" {
-  yaml_body = yamlencode({
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-    metadata = {
-      name      = "ory-selfservice-ui-tls"
-      namespace = "ory"
-    }
-    spec = {
-      secretName = "ory-selfservice-ui-tls"
-      dnsNames   = [var.ory_ui_hostname]
-      issuerRef  = local.cert_issuer
     }
   })
 
@@ -870,7 +821,7 @@ resource "kubectl_manifest" "ui_certificate" {
 module "ory_hydra" {
   source = "../../../kubernetes/modules/ory-hydra"
 
-  namespace        = "ory"
+  namespace        = local.ory_namespace
   create_namespace = false
 
   dsn        = local.ory_hydra_dsn
@@ -912,7 +863,7 @@ module "ory_hydra" {
     module.coredns,
     azurerm_postgresql_flexible_server_configuration.ory_extensions,
     kubernetes_secret.ory_oel_registry,
-    kubectl_manifest.hydra_certificate,
+    kubectl_manifest.ory_certificate["hydra-tls"],
   ]
 }
 
@@ -921,7 +872,7 @@ module "ory_hydra" {
 module "ory_selfservice_ui" {
   source = "../../../kubernetes/modules/ory-selfservice-ui"
 
-  namespace = "ory"
+  namespace = local.ory_namespace
   # Server-side calls from the UI pod to Kratos's public API. With the default
   # self-signed issuer the cert covers the cluster service URL, so we use it
   # directly. With var.cert_issuer_ref set the cert may only have the external
@@ -944,17 +895,35 @@ module "ory_selfservice_ui" {
   depends_on = [
     module.ory_kratos,
     module.coredns,
-    kubectl_manifest.ui_certificate,
+    kubectl_manifest.ory_certificate["ory-selfservice-ui-tls"],
   ]
 }
 
-# External LoadBalancer for Kratos's public API. Kratos returns browser-facing URLs
-# that redirect here (e.g., form submissions, verification links).
-# The admin port (4434) is intentionally NOT exposed — only cluster-internal access.
-resource "kubernetes_service_v1" "kratos_public_lb" {
+# External LoadBalancers for Kratos public (4433), Hydra public (4444), and
+# the selfservice UI. Admin ports (Kratos 4434, Hydra 4445) are intentionally
+# not exposed; they stay cluster-internal.
+resource "kubernetes_service_v1" "ory_lb" {
+  for_each = {
+    kratos-public-lb = {
+      app_name     = "kratos"
+      app_instance = "kratos"
+      target_port  = 4433
+    }
+    hydra-public-lb = {
+      app_name     = "hydra"
+      app_instance = "hydra"
+      target_port  = 4444
+    }
+    ory-selfservice-ui-lb = {
+      app_name     = "kratos-selfservice-ui-node"
+      app_instance = module.ory_selfservice_ui.service_name
+      target_port  = module.ory_selfservice_ui.port
+    }
+  }
+
   metadata {
-    name      = "kratos-public-lb"
-    namespace = "ory"
+    name      = each.key
+    namespace = local.ory_namespace
     annotations = var.internal_load_balancer ? {
       "service.beta.kubernetes.io/azure-load-balancer-internal" = "true"
     } : {}
@@ -962,54 +931,26 @@ resource "kubernetes_service_v1" "kratos_public_lb" {
 
   spec {
     type = "LoadBalancer"
-
     selector = {
-      "app.kubernetes.io/name"     = "kratos"
-      "app.kubernetes.io/instance" = "kratos"
+      "app.kubernetes.io/name"     = each.value.app_name
+      "app.kubernetes.io/instance" = each.value.app_instance
     }
-
     port {
       name        = "https"
       port        = 443
-      target_port = 4433
+      target_port = each.value.target_port
       protocol    = "TCP"
     }
   }
 
-  depends_on = [module.ory_kratos]
+  depends_on = [
+    module.ory_kratos,
+    module.ory_hydra,
+    module.ory_selfservice_ui,
+  ]
 }
 
-# External LoadBalancer for Hydra's public OAuth2/OIDC endpoints.
-# The admin port (4445) is intentionally NOT exposed — only cluster-internal access.
-resource "kubernetes_service_v1" "hydra_public_lb" {
-  metadata {
-    name      = "hydra-public-lb"
-    namespace = "ory"
-    annotations = var.internal_load_balancer ? {
-      "service.beta.kubernetes.io/azure-load-balancer-internal" = "true"
-    } : {}
-  }
-
-  spec {
-    type = "LoadBalancer"
-
-    selector = {
-      "app.kubernetes.io/name"     = "hydra"
-      "app.kubernetes.io/instance" = "hydra"
-    }
-
-    port {
-      name        = "https"
-      port        = 443
-      target_port = 4444
-      protocol    = "TCP"
-    }
-  }
-
-  depends_on = [module.ory_hydra]
-}
-
-# External LoadBalancer for the Materialize console on port 443 (the console
+# External LoadBalancer for the Materialize console on 443 (the console
 # redirects away from non-canonical ports, so we need HTTPS on 443 externally).
 resource "kubernetes_service_v1" "console_lb_443" {
   metadata {
@@ -1022,14 +963,12 @@ resource "kubernetes_service_v1" "console_lb_443" {
 
   spec {
     type = "LoadBalancer"
-
     selector = {
       "materialize.cloud/app"                    = "console"
       "materialize.cloud/mz-resource-id"         = module.materialize_instance.instance_resource_id
       "materialize.cloud/organization-name"      = local.materialize_instance_name
       "materialize.cloud/organization-namespace" = local.materialize_instance_namespace
     }
-
     port {
       name        = "https"
       port        = 443
@@ -1041,35 +980,6 @@ resource "kubernetes_service_v1" "console_lb_443" {
   depends_on = [module.materialize_instance]
 }
 
-# External LoadBalancer for the selfservice UI (browser-facing login/consent).
-resource "kubernetes_service_v1" "ui_lb" {
-  metadata {
-    name      = "ory-selfservice-ui-lb"
-    namespace = "ory"
-    annotations = var.internal_load_balancer ? {
-      "service.beta.kubernetes.io/azure-load-balancer-internal" = "true"
-    } : {}
-  }
-
-  spec {
-    type = "LoadBalancer"
-
-    selector = {
-      "app.kubernetes.io/name"     = "kratos-selfservice-ui-node"
-      "app.kubernetes.io/instance" = module.ory_selfservice_ui.service_name
-    }
-
-    port {
-      name        = "https"
-      port        = 443
-      target_port = module.ory_selfservice_ui.port
-      protocol    = "TCP"
-    }
-  }
-
-  depends_on = [module.ory_selfservice_ui]
-}
-
 # Register an OAuth2 client in Hydra for Materialize.
 # Hydra Maester (enabled by default in the ory-hydra module) watches for these CRDs
 # and creates/manages the OAuth2 client via Hydra's admin API.
@@ -1078,7 +988,7 @@ resource "kubernetes_service_v1" "ui_lb" {
 data "kubernetes_secret_v1" "oauth2_client" {
   metadata {
     name      = "materialize-oauth2-client"
-    namespace = "ory"
+    namespace = local.ory_namespace
   }
 
   depends_on = [kubectl_manifest.materialize_oauth2_client]
