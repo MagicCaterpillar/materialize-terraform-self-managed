@@ -197,8 +197,6 @@ module "networking" {
   api_server_subnet_cidr             = local.vnet_config.api_server_subnet_cidr
 
   tags = var.tags
-
-  depends_on = [azurerm_resource_group.materialize]
 }
 
 # AKS Cluster with Default Node Pool
@@ -230,8 +228,6 @@ module "aks" {
   log_analytics_workspace_id = local.aks_config.log_analytics_workspace_id
 
   tags = var.tags
-
-  depends_on = [azurerm_resource_group.materialize]
 }
 
 # Materialize-dedicated node pool with taints (via labels on Azure)
@@ -262,15 +258,11 @@ module "materialize_nodepool" {
   node_taints = local.materialize_node_taints
 
   tags = var.tags
-
-  depends_on = [azurerm_resource_group.materialize]
 }
 
 
 module "database" {
   source = "../../modules/database"
-
-  depends_on = [module.networking]
 
   # Database configuration using new structure
   databases = [
@@ -304,8 +296,6 @@ module "database" {
 # Separate Postgres instance for Ory (Kratos + Hydra)
 module "ory_database" {
   source = "../../modules/database"
-
-  depends_on = [module.networking]
 
   databases = [
     {
@@ -342,8 +332,6 @@ resource "azurerm_postgresql_flexible_server_configuration" "ory_extensions" {
   name      = "azure.extensions"
   server_id = module.ory_database.server_id
   value     = "btree_gin,pg_trgm,uuid-ossp"
-
-  depends_on = [module.ory_database]
 }
 
 module "storage" {
@@ -363,8 +351,6 @@ module "storage" {
   service_account_name      = local.materialize_instance_name
 
   storage_account_tags = var.tags
-
-  depends_on = [azurerm_resource_group.materialize]
 }
 
 resource "random_password" "external_login_password_mz_system" {
@@ -379,10 +365,6 @@ module "coredns" {
   node_selector      = local.generic_node_labels
   kubeconfig_data    = module.aks.kube_config_raw
   cluster_identifier = module.aks.cluster_name
-  depends_on = [
-    module.aks,
-    module.networking,
-  ]
 }
 
 module "cert_manager" {
@@ -392,7 +374,6 @@ module "cert_manager" {
 
   depends_on = [
     module.aks,
-    module.networking,
     module.coredns,
   ]
 }
@@ -468,10 +449,6 @@ module "grafana" {
   create_namespace = false
   prometheus_url   = module.prometheus[0].prometheus_url
   node_selector    = local.generic_node_labels
-
-  depends_on = [
-    module.prometheus,
-  ]
 }
 
 module "materialize_instance" {
@@ -521,16 +498,9 @@ module "materialize_instance" {
   }
 
   depends_on = [
-    module.aks,
-    module.database,
-    module.storage,
-    module.networking,
-    module.self_signed_cluster_issuer,
     module.operator,
     module.materialize_nodepool,
     module.coredns,
-    module.ory_hydra,
-    kubectl_manifest.materialize_oauth2_client,
   ]
 }
 
@@ -542,10 +512,6 @@ module "load_balancers" {
   resource_id         = module.materialize_instance.instance_resource_id
   internal            = var.internal_load_balancer
   ingress_cidr_blocks = var.internal_load_balancer ? null : var.ingress_cidr_blocks
-
-  depends_on = [
-    module.materialize_instance,
-  ]
 }
 
 # Allow Materialize pods to reach Ory (Hydra OIDC discovery + JWKS).
@@ -773,8 +739,6 @@ module "ory_kratos" {
   upstream_oidc_providers = var.upstream_oidc_providers
 
   depends_on = [
-    module.aks,
-    module.ory_database,
     module.coredns,
     azurerm_postgresql_flexible_server_configuration.ory_extensions,
     kubernetes_secret.ory_oel_registry,
@@ -812,10 +776,7 @@ resource "kubectl_manifest" "ory_certificate" {
     }
   })
 
-  depends_on = [
-    module.self_signed_cluster_issuer,
-    kubernetes_namespace.ory,
-  ]
+  depends_on = [kubernetes_namespace.ory]
 }
 
 module "ory_hydra" {
@@ -857,8 +818,6 @@ module "ory_hydra" {
   node_selector = local.generic_node_labels
 
   depends_on = [
-    module.aks,
-    module.ory_database,
     module.ory_kratos,
     module.coredns,
     azurerm_postgresql_flexible_server_configuration.ory_extensions,
@@ -893,7 +852,6 @@ module "ory_selfservice_ui" {
   node_selector = local.generic_node_labels
 
   depends_on = [
-    module.ory_kratos,
     module.coredns,
     kubectl_manifest.ory_certificate["ory-selfservice-ui-tls"],
   ]
@@ -946,7 +904,6 @@ resource "kubernetes_service_v1" "ory_lb" {
   depends_on = [
     module.ory_kratos,
     module.ory_hydra,
-    module.ory_selfservice_ui,
   ]
 }
 
@@ -976,8 +933,6 @@ resource "kubernetes_service_v1" "console_lb_443" {
       protocol    = "TCP"
     }
   }
-
-  depends_on = [module.materialize_instance]
 }
 
 # Register an OAuth2 client in Hydra for Materialize.
@@ -1018,6 +973,4 @@ resource "kubectl_manifest" "materialize_oauth2_client" {
       tokenEndpointAuthMethod = "none"
     }
   })
-
-  depends_on = [module.ory_hydra]
 }
