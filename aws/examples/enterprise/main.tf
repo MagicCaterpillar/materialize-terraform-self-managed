@@ -71,11 +71,6 @@ module "eks" {
   materialize_node_ingress_cidrs           = [module.networking.vpc_cidr_block]
   k8s_apiserver_authorized_networks        = var.k8s_apiserver_authorized_networks
   tags                                     = var.tags
-
-
-  depends_on = [
-    module.networking,
-  ]
 }
 
 # 2.1 Create base node group for Karpenter and coredns
@@ -112,10 +107,7 @@ module "vpc_cni" {
 
   tags = var.tags
 
-  depends_on = [
-    module.eks,
-    module.base_node_group,
-  ]
+  depends_on = [module.base_node_group]
 }
 
 module "coredns" {
@@ -128,9 +120,7 @@ module "coredns" {
   cluster_identifier                 = module.eks.cluster_name
 
   depends_on = [
-    module.eks,
     module.base_node_group,
-    module.networking,
     module.vpc_cni,
   ]
 }
@@ -146,11 +136,7 @@ module "karpenter" {
   cluster_oidc_issuer_url = module.eks.cluster_oidc_issuer_url
   node_selector           = local.base_node_labels
 
-  depends_on = [
-    module.eks,
-    module.base_node_group,
-    module.networking,
-  ]
+  depends_on = [module.base_node_group]
 }
 
 # Create a generic nodeclass and nodepool for all workloads except Materialize.
@@ -165,10 +151,6 @@ module "ec2nodeclass_generic" {
   subnet_ids         = module.networking.private_subnet_ids
   swap_enabled       = false
   tags               = var.tags
-
-  depends_on = [
-    module.karpenter,
-  ]
 }
 
 module "nodepool_generic" {
@@ -183,7 +165,6 @@ module "nodepool_generic" {
   kubeconfig_data = local.kubeconfig_data
 
   depends_on = [
-    module.karpenter,
     module.ec2nodeclass_generic,
     module.coredns,
   ]
@@ -201,10 +182,6 @@ module "ec2nodeclass_materialize" {
   subnet_ids         = module.networking.private_subnet_ids
   swap_enabled       = true
   tags               = var.tags
-
-  depends_on = [
-    module.karpenter,
-  ]
 }
 
 module "nodepool_materialize" {
@@ -228,7 +205,6 @@ module "nodepool_materialize" {
   kubeconfig_data = local.kubeconfig_data
 
   depends_on = [
-    module.karpenter,
     module.ec2nodeclass_materialize,
     module.coredns,
   ]
@@ -249,7 +225,6 @@ module "aws_lbc" {
   tags = var.tags
 
   depends_on = [
-    module.eks,
     module.nodepool_generic,
     module.coredns,
   ]
@@ -267,7 +242,6 @@ module "ebs_csi_driver" {
   tags = var.tags
 
   depends_on = [
-    module.eks,
     module.base_node_group,
     module.coredns,
   ]
@@ -280,10 +254,8 @@ module "cert_manager" {
   node_selector = local.generic_node_labels
 
   depends_on = [
-    module.networking,
     module.eks,
     module.nodepool_generic,
-    module.aws_lbc,
     module.coredns,
   ]
 }
@@ -333,8 +305,6 @@ module "operator" {
   } : {}
 
   depends_on = [
-    module.eks,
-    module.networking,
     module.nodepool_generic,
     module.coredns,
     module.vpc_cni,
@@ -495,17 +465,10 @@ module "materialize_instance" {
   }
 
   depends_on = [
-    module.eks,
-    module.database,
-    module.storage,
-    module.networking,
-    module.self_signed_cluster_issuer,
     module.operator,
     module.aws_lbc,
     module.nodepool_materialize,
     module.coredns,
-    module.ory_hydra,
-    kubectl_manifest.materialize_oauth2_client,
   ]
 }
 
@@ -537,10 +500,6 @@ module "grafana" {
   storage_class    = module.ebs_csi_driver.storage_class_name
   prometheus_url   = module.prometheus[0].prometheus_url
   node_selector    = local.generic_node_labels
-
-  depends_on = [
-    module.prometheus,
-  ]
 }
 
 # 11. Setup dedicated NLB for Materialize instance
@@ -559,10 +518,6 @@ module "materialize_nlb" {
   ingress_cidr_blocks              = var.ingress_cidr_blocks
 
   tags = var.tags
-
-  depends_on = [
-    module.materialize_instance
-  ]
 }
 
 # -----------------------------------------------------------------------------
@@ -707,8 +662,6 @@ module "ory_kratos" {
   upstream_oidc_providers = var.upstream_oidc_providers
 
   depends_on = [
-    module.eks,
-    module.ory_kratos_database,
     module.nodepool_generic,
     module.coredns,
     kubernetes_secret.ory_oel_registry,
@@ -756,8 +709,6 @@ module "ory_hydra" {
   node_selector = local.generic_node_labels
 
   depends_on = [
-    module.eks,
-    module.ory_hydra_database,
     module.ory_kratos,
     module.nodepool_generic,
     module.coredns,
@@ -824,7 +775,6 @@ module "ory_selfservice_ui" {
   node_selector = local.generic_node_labels
 
   depends_on = [
-    module.ory_kratos,
     module.coredns,
     kubectl_manifest.ory_certificate["ory-selfservice-ui-tls"],
   ]
@@ -1036,8 +986,6 @@ resource "kubectl_manifest" "materialize_oauth2_client" {
       tokenEndpointAuthMethod = "none"
     }
   })
-
-  depends_on = [module.ory_hydra]
 }
 
 locals {
