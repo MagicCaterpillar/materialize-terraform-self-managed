@@ -42,15 +42,11 @@ variable "ingress_cidr_blocks" {
 }
 
 variable "k8s_apiserver_authorized_networks" {
-  description = "The CIDR blocks that are allowed to reach the Kubernetes master endpoint."
+  description = "List of CIDR blocks (with display names) allowed to reach the GKE master endpoint. Required (no default) so that an enterprise deployment makes an explicit choice instead of inheriting an open default. Pass a single 0.0.0.0/0 entry to allow all (lab use); production should pin a tight allowlist."
   type = list(object({
     cidr_block   = string
     display_name = string
   }))
-  default = [{
-    cidr_block   = "0.0.0.0/0"
-    display_name = "Default Placeholder for authorized networks"
-  }]
   nullable = false
 
   validation {

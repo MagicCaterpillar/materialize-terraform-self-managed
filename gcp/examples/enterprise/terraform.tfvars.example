@@ -1,8 +1,53 @@
-project_id     = "my-gcp-project-id"
-region         = "us-central1"
-name_prefix    = "mz-enterprise"
-license_key    = "your-materialize-license-key"
-ory_issuer_url = "https://auth.example.com/"
+project_id  = "my-gcp-project-id"
+region      = "us-central1"
+name_prefix = "mz-enterprise"
+license_key = "your-materialize-license-key"
+
+# Restrict access to the GKE master endpoint. Required (no default). For lab
+# use you may pass a single 0.0.0.0/0 entry, but production should pin a
+# tight allowlist.
+k8s_apiserver_authorized_networks = [
+  {
+    cidr_block   = "203.0.113.0/24"
+    display_name = "corp-vpn"
+  },
+]
+
+# OEL image pull credentials. Contact Materialize sales for access to Ory's
+# private registry while the Materialize-hosted mirror is in flight.
+ory_oel_registry = "europe-docker.pkg.dev/ory-artifacts"
+ory_oel_key_file = "/path/to/ory-artifacts-sa-key.json"
+
+# Public hostnames the browser uses. After apply, point A records at the LB
+# IPs. The materialize_console_hostname is also used as the OAuth2 redirect
+# URI registered with Hydra.
+ory_hydra_hostname           = "hydra.mz.example.com"
+ory_ui_hostname              = "auth.mz.example.com"
+ory_kratos_hostname          = "kratos.mz.example.com"
+materialize_console_hostname = "console.mz.example.com"
+
+# Optional: bring your own cert-manager (Cluster)Issuer for browser-facing
+# TLS. Leave commented out to use the in-cluster self-signed issuer (browser
+# trust warnings). See the README for a Let's Encrypt + Cloudflare snippet.
+# cert_issuer_ref = {
+#   name = "letsencrypt-prod"
+#   kind = "ClusterIssuer"
+# }
+
+# Optional: federate logins through one or more upstream IdPs (Okta, Entra,
+# Auth0, Google Workspace). Each entry renders as a "Sign in with X" button
+# on the selfservice UI. Leave as [] for password-only login.
+# upstream_oidc_providers = [
+#   {
+#     id            = "okta"
+#     provider      = "generic"
+#     client_id     = "your-okta-client-id"
+#     client_secret = "your-okta-client-secret"
+#     issuer_url    = "https://your-org.okta.com/oauth2/default"
+#     label         = "Okta"
+#   },
+# ]
+
 labels = {
   environment = "demo"
   project     = "materialize-enterprise"

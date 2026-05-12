@@ -232,6 +232,7 @@ module "coredns" {
   create_coredns_service_account              = true
   node_selector                               = local.generic_node_labels
   kubeconfig_data                             = local.kubeconfig_data
+  cluster_identifier                          = module.gke.cluster_name
   coredns_deployment_to_scale_down            = "kube-dns"
   coredns_autoscaler_deployment_to_scale_down = "kube-dns-autoscaler"
   depends_on = [
