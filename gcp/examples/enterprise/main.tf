@@ -214,8 +214,6 @@ module "networking" {
 module "gke" {
   source = "../../modules/gke"
 
-  depends_on = [module.networking]
-
   project_id   = var.project_id
   region       = var.region
   prefix       = var.name_prefix
@@ -230,8 +228,7 @@ module "gke" {
 
 # Create and configure generic node pool for all workloads except Materialize
 module "generic_nodepool" {
-  source     = "../../modules/nodepool"
-  depends_on = [module.gke]
+  source = "../../modules/nodepool"
 
   prefix                = "${var.name_prefix}-generic"
   region                = var.region
@@ -250,8 +247,7 @@ module "generic_nodepool" {
 
 # Create and configure Materialize-dedicated node pool with taints
 module "materialize_nodepool" {
-  source     = "../../modules/nodepool"
-  depends_on = [module.gke]
+  source = "../../modules/nodepool"
 
   prefix                = "${var.name_prefix}-mz"
   region                = var.region
@@ -280,10 +276,7 @@ module "coredns" {
   cluster_identifier                          = module.gke.cluster_name
   coredns_deployment_to_scale_down            = "kube-dns"
   coredns_autoscaler_deployment_to_scale_down = "kube-dns-autoscaler"
-  depends_on = [
-    module.gke,
-    module.generic_nodepool,
-  ]
+  depends_on                                  = [module.generic_nodepool]
 }
 
 resource "random_password" "external_login_password_mz_system" {
@@ -294,8 +287,7 @@ resource "random_password" "external_login_password_mz_system" {
 
 # Set up PostgreSQL database instance for Materialize metadata storage
 module "database" {
-  source     = "../../modules/database"
-  depends_on = [module.networking]
+  source = "../../modules/database"
 
   databases = [local.database_config.database]
   # We don't provide password, so random password is generated
@@ -313,8 +305,7 @@ module "database" {
 
 # Separate Cloud SQL instance for Ory (Kratos + Hydra)
 module "ory_database" {
-  source     = "../../modules/database"
-  depends_on = [module.networking]
+  source = "../../modules/database"
 
   databases = [
     { name = "kratos", charset = "UTF8", collation = "en_US.UTF8" },
@@ -354,7 +345,6 @@ module "cert_manager" {
 
   depends_on = [
     module.gke,
-    module.generic_nodepool,
     module.coredns,
   ]
 }
@@ -402,8 +392,6 @@ module "operator" {
   depends_on = [
     module.gke,
     module.generic_nodepool,
-    module.database,
-    module.storage,
     module.coredns,
   ]
 }
@@ -418,8 +406,6 @@ module "prometheus" {
   storage_class    = local.storage_class
   depends_on = [
     module.operator,
-    module.gke,
-    module.generic_nodepool,
     module.coredns,
   ]
 }
@@ -434,10 +420,6 @@ module "grafana" {
   create_namespace = false
   prometheus_url   = module.prometheus[0].prometheus_url
   node_selector    = local.generic_node_labels
-
-  depends_on = [
-    module.prometheus,
-  ]
 }
 
 # Deploy Materialize instance with configured backend connections
@@ -487,16 +469,9 @@ module "materialize_instance" {
   }
 
   depends_on = [
-    module.gke,
-    module.database,
-    module.storage,
-    module.networking,
-    module.self_signed_cluster_issuer,
     module.operator,
     module.materialize_nodepool,
     module.coredns,
-    module.ory_hydra,
-    kubectl_manifest.materialize_oauth2_client,
   ]
 }
 
@@ -513,10 +488,6 @@ module "load_balancers" {
   instance_name              = local.materialize_instance_name
   namespace                  = local.materialize_instance_namespace
   resource_id                = module.materialize_instance.instance_resource_id
-
-  depends_on = [
-    module.materialize_instance,
-  ]
 }
 
 # -----------------------------------------------------------------------------
@@ -661,9 +632,6 @@ module "ory_kratos" {
   upstream_oidc_providers = var.upstream_oidc_providers
 
   depends_on = [
-    module.gke,
-    module.ory_database,
-    module.generic_nodepool,
     module.coredns,
     kubernetes_secret.ory_oel_registry,
     kubernetes_namespace.ory,
@@ -710,10 +678,7 @@ module "ory_hydra" {
   node_selector = local.generic_node_labels
 
   depends_on = [
-    module.gke,
-    module.ory_database,
     module.ory_kratos,
-    module.generic_nodepool,
     module.coredns,
     kubernetes_secret.ory_oel_registry,
     kubectl_manifest.ory_certificate["hydra-tls"],
@@ -778,7 +743,6 @@ module "ory_selfservice_ui" {
   node_selector = local.generic_node_labels
 
   depends_on = [
-    module.ory_kratos,
     module.coredns,
     kubectl_manifest.ory_certificate["ory-selfservice-ui-tls"],
   ]
@@ -979,6 +943,4 @@ resource "kubectl_manifest" "materialize_oauth2_client" {
       tokenEndpointAuthMethod = "none"
     }
   })
-
-  depends_on = [module.ory_hydra]
 }
