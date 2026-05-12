@@ -45,19 +45,15 @@ variable "license_key" {
 }
 
 variable "k8s_apiserver_authorized_networks" {
-  description = "List of authorized IP ranges that can access the Kubernetes API server when public access is available. Defaults to ['0.0.0.0/0'] (allow all). For production, restrict to specific IPs (e.g., ['203.0.113.0/24'])"
+  description = "List of authorized IP ranges that can reach the AKS API server. Required (no default) so that an enterprise deployment makes an explicit choice instead of inheriting an open default. Pass ['0.0.0.0/0'] to allow all (lab use); production should pin a tight allowlist (e.g., ['203.0.113.0/24'])."
   type        = list(string)
-  default     = ["0.0.0.0/0"] # Explicit default: allow all IPs
-  nullable    = true
+  nullable    = false
 
   validation {
-    condition = (
-      var.k8s_apiserver_authorized_networks == null ||
-      alltrue([
-        for cidr in var.k8s_apiserver_authorized_networks :
-        can(cidrhost(cidr, 0))
-      ])
-    )
+    condition = alltrue([
+      for cidr in var.k8s_apiserver_authorized_networks :
+      can(cidrhost(cidr, 0))
+    ])
     error_message = "All k8s_apiserver_authorized_networks must be valid CIDR blocks (e.g., '203.0.113.0/24')."
   }
 }

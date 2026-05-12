@@ -65,17 +65,17 @@ tags = {
 - `name_prefix`: Prefix for all resource names
 - `tags`: Map of tags to apply to resources
 - `license_key`: Materialize license key
+- `k8s_apiserver_authorized_networks`: List of CIDR blocks allowed to reach the AKS API server. No default; pass `["0.0.0.0/0"]` for lab use, or a tight allowlist for production.
 - `ory_oel_registry`: Base registry URL for the Ory Enterprise License (OEL) images
 - `ory_oel_key_file`: Path to a service-account key file with read access to `ory_oel_registry`
 - `ory_hydra_hostname`, `ory_ui_hostname`, `ory_kratos_hostname`, `materialize_console_hostname`: Public hostnames for the four browser-facing services
 
 **Optional Variables:**
 - `location`: Azure region for deployment (defaults to `westus2`)
-- `k8s_apiserver_authorized_networks`: List of authorized IP ranges for AKS API server access (defaults to `["0.0.0.0/0"]`)
 - `ingress_cidr_blocks`: List of CIDR blocks allowed to reach the LoadBalancer frontends (no effect when `internal_load_balancer = true`)
 - `internal_load_balancer`: Whether to use an internal load balancer (defaults to `true`). Set to `false` for prod-like demos validated against real DNS.
 - `enable_observability`: Enable Prometheus and Grafana monitoring stack (defaults to `false`)
-- TLS certificate options (`enable_letsencrypt`, `cert_issuer_ref`, …): see [TLS Certificates](#tls-certificates) below.
+- TLS certificate options (`cert_issuer_ref`, …): see [TLS Certificates](#tls-certificates) below.
 
 ### Step 2: Deploy
 
@@ -255,3 +255,31 @@ After `terraform apply`, create A records for your hostnames (Hydra, Kratos, sel
 ```bash
 terraform destroy
 ```
+
+---
+
+## Limitations
+
+### OEL registry credentials in Terraform state
+
+The `kubernetes_secret.ory_oel_registry` resource reads `var.ory_oel_key_file` via `file()` at plan time and embeds the decoded JSON service-account key into the Kubernetes secret's `data` field. Terraform stores that value in plaintext in the state file. Anyone with read access to the state backend (Azure Blob, S3, the local `terraform.tfstate`) can extract working GCP credentials for Ory's Artifact Registry.
+
+Treat the state file as a secret. The planned replacement is the Materialize-hosted OEL mirror, which authenticates against a registry proxy using the license-key JWT (no shared service-account key on disk). Migrate to that path once it ships.
+
+### Resource-group destroy guard
+
+This example sets `prevent_deletion_if_contains_resources = true` on the `azurerm` provider, so `terraform destroy` refuses to delete the resource group while it still has children. This protects you from a destroy run that would silently take down databases, storage, and cluster state. To actually tear the stack down, destroy the contents first (or temporarily flip the flag to `false` and re-apply before destroying).
+
+### Key Vault soft-delete
+
+This example sets `purge_soft_delete_on_destroy = false` and `recover_soft_deleted_key_vaults = true`. After a `terraform destroy` the Key Vault enters a 90-day soft-deleted retention window instead of being purged immediately. A subsequent `terraform apply` with the same name will try to recover the soft-deleted vault rather than fail. If you really need to reuse the name on a fresh vault, purge it manually:
+
+```bash
+az keyvault purge --name <vault-name> --location <location>
+```
+
+For lab iteration where you do not care about recovery, you can flip `purge_soft_delete_on_destroy = true` in the `azurerm` provider block.
+
+### Balancerd SAN
+
+This example only puts `materialize_console_hostname` into the **console** cert SAN list. Balancerd (the SQL wire-protocol endpoint) sits behind its own LoadBalancer and is not exposed under a public hostname by default. If you want external SQL access, register a separate hostname, create an A record for it pointing at the balancerd LB IP, and add it to the `balancerd_extra_dns_names` argument of the `materialize_instance` module call in `main.tf`.

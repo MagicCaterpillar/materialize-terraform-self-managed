@@ -2,13 +2,14 @@ provider "azurerm" {
   # Set the Azure subscription ID here or use the AZURE_SUBSCRIPTION_ID environment variable
   subscription_id = var.subscription_id
 
+  # Conservative defaults for an enterprise stack. See README "Limitations".
   features {
     resource_group {
-      prevent_deletion_if_contains_resources = false
+      prevent_deletion_if_contains_resources = true
     }
     key_vault {
-      purge_soft_delete_on_destroy    = true
-      recover_soft_deleted_key_vaults = false
+      purge_soft_delete_on_destroy    = false
+      recover_soft_deleted_key_vaults = true
     }
   }
 }
@@ -384,9 +385,10 @@ resource "random_password" "external_login_password_mz_system" {
 
 # Deploy custom CoreDNS with TTL 0 (AKS's coredns doesn't support disabling caching)
 module "coredns" {
-  source          = "../../../kubernetes/modules/coredns"
-  node_selector   = local.generic_node_labels
-  kubeconfig_data = module.aks.kube_config_raw
+  source             = "../../../kubernetes/modules/coredns"
+  node_selector      = local.generic_node_labels
+  kubeconfig_data    = module.aks.kube_config_raw
+  cluster_identifier = module.aks.cluster_id
   depends_on = [
     module.aks,
     module.networking,
@@ -509,9 +511,8 @@ module "materialize_instance" {
   # so always route the internal cert spec through the private (self-signed) CA.
   internal_issuer_ref = local.internal_cert_issuer
 
-  # Include the external console hostname in the cert so browsers accept it.
-  console_extra_dns_names   = [var.materialize_console_hostname]
-  balancerd_extra_dns_names = [var.materialize_console_hostname]
+  # Browser-facing SAN. balancerd is intentionally omitted; see README.
+  console_extra_dns_names = [var.materialize_console_hostname]
 
   # OIDC configuration — points Materialize at Hydra for JWT validation.
   # client_id comes from the Hydra Maester-generated secret (Hydra Maester auto-
@@ -650,6 +651,8 @@ resource "kubernetes_namespace" "ory" {
   depends_on = [module.aks]
 }
 
+# SECURITY: file() embeds the GCP service-account key into Terraform state
+# in plaintext. Treat state as sensitive. See README "Limitations".
 resource "kubernetes_secret" "ory_oel_registry" {
   metadata {
     name      = "ory-oel-registry"
@@ -932,6 +935,9 @@ module "ory_selfservice_ui" {
 
   # Serve TLS directly using cert-manager-issued certs.
   tls_cert_secret_name = "ory-selfservice-ui-tls"
+
+  # Only needed when Kratos/Hydra are served by the in-cluster self-signed CA.
+  trust_mounted_ca_cert = var.cert_issuer_ref == null
 
   node_selector = local.generic_node_labels
 

@@ -281,9 +281,10 @@ resource "random_password" "external_login_password_mz_system" {
 
 # Deploy custom CoreDNS with TTL 0 (AKS's coredns doesn't support disabling caching)
 module "coredns" {
-  source          = "../../../kubernetes/modules/coredns"
-  node_selector   = local.generic_node_labels
-  kubeconfig_data = module.aks.kube_config_raw
+  source             = "../../../kubernetes/modules/coredns"
+  node_selector      = local.generic_node_labels
+  kubeconfig_data    = module.aks.kube_config_raw
+  cluster_identifier = module.aks.cluster_id
   depends_on = [
     module.aks,
     module.networking,
