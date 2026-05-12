@@ -125,6 +125,7 @@ module "coredns" {
   # in aws coredns autoscaler deployment doesn't exist
   disable_default_coredns_autoscaler = false
   kubeconfig_data                    = local.kubeconfig_data
+  cluster_identifier                 = module.eks.cluster_name
 
   depends_on = [
     module.eks,
@@ -474,9 +475,8 @@ module "materialize_instance" {
   # so always route the internal cert spec through the private (self-signed) CA.
   internal_issuer_ref = local.internal_cert_issuer
 
-  # Include the external console hostname in the cert so browsers accept it.
-  console_extra_dns_names   = [var.materialize_console_hostname]
-  balancerd_extra_dns_names = [var.materialize_console_hostname]
+  # Browser-facing SAN. balancerd is intentionally omitted; see README.
+  console_extra_dns_names = [var.materialize_console_hostname]
 
   # OIDC configuration — points Materialize at Hydra for JWT validation.
   # client_id comes from the Hydra Maester-generated secret (Hydra Maester auto-
@@ -575,6 +575,8 @@ resource "kubernetes_namespace" "ory" {
   depends_on = [module.eks]
 }
 
+# SECURITY: file() embeds the GCP service-account key into Terraform state
+# in plaintext. Treat state as sensitive. See README "Limitations".
 resource "kubernetes_secret" "ory_oel_registry" {
   metadata {
     name      = "ory-oel-registry"
@@ -857,6 +859,9 @@ module "ory_selfservice_ui" {
 
   # Serve TLS directly using cert-manager-issued certs.
   tls_cert_secret_name = "ory-selfservice-ui-tls"
+
+  # Only needed when Kratos/Hydra are served by the in-cluster self-signed CA.
+  trust_mounted_ca_cert = var.cert_issuer_ref == null
 
   node_selector = local.generic_node_labels
 

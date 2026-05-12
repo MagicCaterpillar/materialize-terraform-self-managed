@@ -50,10 +50,9 @@ variable "ingress_cidr_blocks" {
 }
 
 variable "k8s_apiserver_authorized_networks" {
-  description = "List of CIDR blocks to allow public access to the EKS cluster endpoint"
+  description = "List of CIDR blocks allowed to reach the EKS cluster endpoint. Required (no default) so that an enterprise deployment makes an explicit choice instead of inheriting an open default. Pass ['0.0.0.0/0'] to allow all (lab use); production should pin a tight allowlist (e.g., ['203.0.113.0/24'])."
   type        = list(string)
   nullable    = false
-  default     = ["0.0.0.0/0"]
 
   validation {
     condition     = alltrue([for cidr in var.k8s_apiserver_authorized_networks : can(cidrhost(cidr, 0))])

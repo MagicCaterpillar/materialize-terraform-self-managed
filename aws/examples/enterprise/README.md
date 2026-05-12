@@ -64,17 +64,17 @@ tags = {
 - `name_prefix`: Prefix for all resource names
 - `license_key`: Materialize license key
 - `tags`: Map of tags to apply to resources
+- `k8s_apiserver_authorized_networks`: List of CIDR blocks allowed to reach the EKS cluster endpoint. No default; pass `["0.0.0.0/0"]` for lab use, or a tight allowlist for production.
 - `ory_oel_registry`: Base registry URL for the Ory Enterprise License (OEL) images
 - `ory_oel_key_file`: Path to a service-account key file with read access to `ory_oel_registry`
 - `ory_hydra_hostname`, `ory_ui_hostname`, `ory_kratos_hostname`, `materialize_console_hostname`: Public hostnames for the four browser-facing services
 
 **Optional Variables:**
 - `aws_region`: AWS region (defaults to `us-east-1`)
-- `k8s_apiserver_authorized_networks`: List of authorized CIDR blocks for EKS API server access
 - `ingress_cidr_blocks`: List of CIDR blocks allowed to reach the NLB (no effect when `internal_load_balancer = true`)
 - `internal_load_balancer`: Whether to use an internal load balancer (defaults to `true`). Set to `false` for prod-like demos validated against real DNS.
 - `enable_observability`: Enable Prometheus and Grafana monitoring stack (defaults to `false`)
-- TLS certificate options (`enable_letsencrypt`, `cert_issuer_ref`, …): see [TLS Certificates](#tls-certificates) below.
+- TLS certificate options (`cert_issuer_ref`, …): see [TLS Certificates](#tls-certificates) below.
 
 ### Step 2: Deploy
 
@@ -255,3 +255,17 @@ After `terraform apply`, create A records for your hostnames (Hydra, Kratos, sel
 ```bash
 terraform destroy
 ```
+
+---
+
+## Limitations
+
+### OEL registry credentials in Terraform state
+
+The `kubernetes_secret.ory_oel_registry` resource reads `var.ory_oel_key_file` via `file()` at plan time and embeds the decoded JSON service-account key into the Kubernetes secret's `data` field. Terraform stores that value in plaintext in the state file. Anyone with read access to the state backend (S3, the local `terraform.tfstate`) can extract working GCP credentials for Ory's Artifact Registry.
+
+Treat the state file as a secret. The planned replacement is the Materialize-hosted OEL mirror, which authenticates against a registry proxy using the license-key JWT (no shared service-account key on disk). Migrate to that path once it ships.
+
+### Balancerd SAN
+
+This example only puts `materialize_console_hostname` into the **console** cert SAN list. Balancerd (the SQL wire-protocol endpoint) sits behind its own NLB and is not exposed under a public hostname by default. If you want external SQL access, register a separate hostname, create an A record for it pointing at the balancerd NLB, and add it to the `balancerd_extra_dns_names` argument of the `materialize_instance` module call in `main.tf`.
