@@ -23,21 +23,21 @@ resource "helm_release" "cert_manager" {
   dynamic "set" {
     for_each = var.node_selector
     content {
-      name  = "nodeSelector.${set.key}"
+      name  = "nodeSelector.${replace(set.key, ".", "\\.")}"
       value = set.value
     }
   }
   dynamic "set" {
     for_each = var.node_selector
     content {
-      name  = "webhook.nodeSelector.${set.key}"
+      name  = "webhook.nodeSelector.${replace(set.key, ".", "\\.")}"
       value = set.value
     }
   }
   dynamic "set" {
     for_each = var.node_selector
     content {
-      name  = "cainjector.nodeSelector.${set.key}"
+      name  = "cainjector.nodeSelector.${replace(set.key, ".", "\\.")}"
       value = set.value
     }
   }

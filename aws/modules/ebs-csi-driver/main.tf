@@ -275,7 +275,7 @@ resource "helm_release" "ebs_csi_driver" {
   dynamic "set" {
     for_each = var.node_selector
     content {
-      name  = "controller.nodeSelector.${set.key}"
+      name  = "controller.nodeSelector.${replace(set.key, ".", "\\.")}"
       value = set.value
     }
   }

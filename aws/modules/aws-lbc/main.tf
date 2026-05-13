@@ -326,7 +326,7 @@ resource "helm_release" "aws_load_balancer_controller" {
   dynamic "set" {
     for_each = var.node_selector
     content {
-      name  = "nodeSelector.${set.key}"
+      name  = "nodeSelector.${replace(set.key, ".", "\\.")}"
       value = set.value
     }
   }

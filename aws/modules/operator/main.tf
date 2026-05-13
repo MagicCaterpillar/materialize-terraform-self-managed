@@ -263,7 +263,7 @@ resource "helm_release" "metrics_server" {
   dynamic "set" {
     for_each = var.operator_node_selector
     content {
-      name  = "nodeSelector.${set.key}"
+      name  = "nodeSelector.${replace(set.key, ".", "\\.")}"
       value = set.value
     }
   }
