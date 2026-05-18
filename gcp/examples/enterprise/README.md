@@ -2,6 +2,8 @@
 
 This example extends the [simple deployment](../simple/) with **Ory Kratos** (identity management) and **Ory Hydra** (OAuth2/OIDC provider) for enterprise authentication via OIDC and SAML.
 
+> **Status: work in progress.** This example currently uses an Ory OEL service-account key file to pull images and is expected to evolve before the feature is generally available. The auth mechanism will be replaced with the Materialize-hosted registry proxy once it ships.
+
 ---
 
 ## What Gets Created
@@ -9,7 +11,7 @@ This example extends the [simple deployment](../simple/) with **Ory Kratos** (id
 Everything from the [simple example](../simple/README.md), plus:
 
 ### Ory Database
-- **Cloud SQL for PostgreSQL** (separate instance from Materialize): Version 15
+- **Cloud SQL for PostgreSQL** (separate instance from Materialize): Version 17
 - **Tier**: db-f1-micro (suitable for Ory workloads)
 - **Databases**: `kratos` and `hydra` on the same instance
 - **Network Access**: Private IP only, same VPC as the Materialize database
@@ -73,7 +75,7 @@ labels = {
 - `region`: GCP region (defaults to `us-central1`)
 - `ingress_cidr_blocks`: List of CIDR blocks allowed to reach the LoadBalancer frontends (no effect when `internal_load_balancer = true`)
 - `internal_load_balancer`: Whether to use internal LBs (defaults to `true`). Set to `false` for prod-like demos validated against real DNS.
-- `enable_observability`: Enable Prometheus and Grafana monitoring stack (defaults to `false`)
+- `enable_observability`: Enable Prometheus and Grafana monitoring stack (defaults to `true`)
 - TLS certificate options (`cert_issuer_ref`, …): see [TLS Certificates](#tls-certificates) below.
 
 ### Step 2: Deploy

@@ -89,15 +89,19 @@ locals {
   }
 
   database_config = {
-    tier      = "db-custom-2-4096"
-    database  = { name = "materialize", charset = "UTF8", collation = "en_US.UTF8" }
-    user_name = "materialize"
+    tier                    = "db-custom-2-4096"
+    database                = { name = "materialize", charset = "UTF8", collation = "en_US.UTF8" }
+    user_name               = "materialize"
+    db_version              = "POSTGRES_17"
+    backup_retained_backups = 35
   }
 
   # Ory database configuration (separate Cloud SQL instance)
   ory_database_config = {
-    tier      = "db-f1-micro"
-    user_name = "oryadmin"
+    tier                    = "db-f1-micro"
+    user_name               = "oryadmin"
+    db_version              = "POSTGRES_17"
+    backup_retained_backups = 35
   }
 
   local_ssd_count = 1
@@ -298,7 +302,9 @@ module "database" {
   prefix     = var.name_prefix
   network_id = module.networking.network_id
 
-  tier = local.database_config.tier
+  tier                    = local.database_config.tier
+  db_version              = local.database_config.db_version
+  backup_retained_backups = local.database_config.backup_retained_backups
 
   labels = var.labels
 }
@@ -318,7 +324,9 @@ module "ory_database" {
   prefix     = "${var.name_prefix}-ory"
   network_id = module.networking.network_id
 
-  tier = local.ory_database_config.tier
+  tier                    = local.ory_database_config.tier
+  db_version              = local.ory_database_config.db_version
+  backup_retained_backups = local.ory_database_config.backup_retained_backups
 
   labels = var.labels
 }
@@ -455,11 +463,14 @@ module "materialize_instance" {
   # Browser-facing SAN. balancerd is intentionally omitted; see README.
   console_extra_dns_names = [var.materialize_console_hostname]
 
-  # OIDC configuration — points Materialize at Hydra for JWT validation.
+  # OIDC configuration. Points Materialize at Hydra for JWT validation.
   # client_id comes from the Hydra Maester-generated secret (Hydra Maester auto-
-  # generates a UUID client_id; the installed CRD version doesn't support setting
+  # generates a UUID client_id; the installed CRD version does not support setting
   # it explicitly).
   # See: https://materialize.com/docs/security/self-managed/sso/
+  # system_parameters can also set any of the other Materialize configuration
+  # parameters listed at:
+  # https://materialize.com/docs/sql/alter-system-set/#key-configuration-parameters
   system_parameters = {
     oidc_issuer               = local.hydra_external_url
     oidc_audience             = jsonencode([data.kubernetes_secret_v1.oauth2_client.data["CLIENT_ID"]])
