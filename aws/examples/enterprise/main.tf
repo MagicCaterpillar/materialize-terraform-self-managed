@@ -333,7 +333,8 @@ resource "random_password" "ory_database_password" {
 module "database" {
   source                    = "../../modules/database"
   name_prefix               = var.name_prefix
-  postgres_version          = "15"
+  postgres_version          = "18"
+  backup_retention_period   = 35
   instance_class            = "db.t3.large"
   allocated_storage         = 50
   max_allocated_storage     = 100
@@ -354,7 +355,8 @@ module "database" {
 module "ory_kratos_database" {
   source                    = "../../modules/database"
   name_prefix               = "${var.name_prefix}-ory-kratos"
-  postgres_version          = "15"
+  postgres_version          = "18"
+  backup_retention_period   = 35
   instance_class            = "db.t3.small"
   allocated_storage         = 20
   max_allocated_storage     = 50
@@ -375,7 +377,8 @@ module "ory_kratos_database" {
 module "ory_hydra_database" {
   source                    = "../../modules/database"
   name_prefix               = "${var.name_prefix}-ory-hydra"
-  postgres_version          = "15"
+  postgres_version          = "18"
+  backup_retention_period   = 35
   instance_class            = "db.t3.small"
   allocated_storage         = 20
   max_allocated_storage     = 50
@@ -451,11 +454,14 @@ module "materialize_instance" {
   # Browser-facing SAN. balancerd is intentionally omitted; see README.
   console_extra_dns_names = [var.materialize_console_hostname]
 
-  # OIDC configuration — points Materialize at Hydra for JWT validation.
+  # OIDC configuration. Points Materialize at Hydra for JWT validation.
   # client_id comes from the Hydra Maester-generated secret (Hydra Maester auto-
-  # generates a UUID client_id; the installed CRD version doesn't support setting
+  # generates a UUID client_id; the installed CRD version does not support setting
   # it explicitly).
   # See: https://materialize.com/docs/security/self-managed/sso/
+  # system_parameters can also set any of the other Materialize configuration
+  # parameters listed at:
+  # https://materialize.com/docs/sql/alter-system-set/#key-configuration-parameters
   system_parameters = {
     oidc_issuer               = local.hydra_external_url
     oidc_audience             = jsonencode([data.kubernetes_secret_v1.oauth2_client.data["CLIENT_ID"]])
