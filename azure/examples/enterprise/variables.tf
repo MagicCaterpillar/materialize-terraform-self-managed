@@ -68,7 +68,7 @@ variable "internal_load_balancer" {
 variable "enable_observability" {
   description = "Enable Prometheus and Grafana monitoring stack for Materialize"
   type        = bool
-  default     = false
+  default     = true
 }
 
 # Ory variables

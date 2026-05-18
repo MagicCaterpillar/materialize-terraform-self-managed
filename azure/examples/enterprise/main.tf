@@ -68,9 +68,9 @@ locals {
 
   database_config = {
     sku_name                      = "GP_Standard_D2s_v3"
-    postgres_version              = "15"
+    postgres_version              = "18"
     storage_mb                    = 32768
-    backup_retention_days         = 7
+    backup_retention_days         = 35
     administrator_login           = "materialize"
     administrator_password        = null # Will generate random password
     database_name                 = "materialize"
@@ -80,9 +80,9 @@ locals {
   # Ory database configuration (separate Postgres instance)
   ory_database_config = {
     sku_name                      = "B_Standard_B1ms"
-    postgres_version              = "15"
+    postgres_version              = "18"
     storage_mb                    = 32768
-    backup_retention_days         = 7
+    backup_retention_days         = 35
     administrator_login           = "oryadmin"
     administrator_password        = null # Will generate random password
     public_network_access_enabled = false
@@ -484,11 +484,14 @@ module "materialize_instance" {
   # Browser-facing SAN. balancerd is intentionally omitted; see README.
   console_extra_dns_names = [var.materialize_console_hostname]
 
-  # OIDC configuration — points Materialize at Hydra for JWT validation.
+  # OIDC configuration. Points Materialize at Hydra for JWT validation.
   # client_id comes from the Hydra Maester-generated secret (Hydra Maester auto-
-  # generates a UUID client_id; the installed CRD version doesn't support setting
+  # generates a UUID client_id; the installed CRD version does not support setting
   # it explicitly).
   # See: https://materialize.com/docs/security/self-managed/sso/
+  # system_parameters can also set any of the other Materialize configuration
+  # parameters listed at:
+  # https://materialize.com/docs/sql/alter-system-set/#key-configuration-parameters
   system_parameters = {
     oidc_issuer               = local.hydra_external_url
     oidc_audience             = jsonencode([data.kubernetes_secret_v1.oauth2_client.data["CLIENT_ID"]])
