@@ -5,7 +5,7 @@
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | ~> 5.0 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.0 |
-| <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | ~> 2.0, < 2.3 |
+| <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | 2.4.0 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | ~> 2.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -14,7 +14,7 @@
 | Name | Version |
 |------|---------|
 | <a name="provider_aws"></a> [aws](#provider\_aws) | ~> 5.0 |
-| <a name="provider_kubectl"></a> [kubectl](#provider\_kubectl) | ~> 2.0, < 2.3 |
+| <a name="provider_kubectl"></a> [kubectl](#provider\_kubectl) | 2.4.0 |
 
 ## Modules
 
@@ -26,7 +26,7 @@ No modules.
 |------|------|
 | [aws_lb_listener.listener](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener) | resource |
 | [aws_lb_target_group.target_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_target_group) | resource |
-| [kubectl_manifest.target_group_binding](https://registry.terraform.io/providers/alekc/kubectl/latest/docs/resources/manifest) | resource |
+| [kubectl_manifest.target_group_binding](https://registry.terraform.io/providers/alekc/kubectl/2.4.0/docs/resources/manifest) | resource |
 
 ## Inputs
 

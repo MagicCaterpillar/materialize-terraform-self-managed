@@ -17,6 +17,7 @@ output "gke_cluster_name" {
 output "gke_cluster_endpoint" {
   description = "GKE cluster endpoint"
   value       = module.gke.cluster_endpoint
+  sensitive   = true
 }
 
 output "gke_cluster_private_endpoint" {

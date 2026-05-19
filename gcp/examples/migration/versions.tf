@@ -23,9 +23,8 @@ terraform {
       version = "~> 1.0"
     }
     kubectl = {
-      source = "alekc/kubectl"
-      # TODO: Unpin once fixed: https://github.com/alekc/terraform-provider-kubectl/issues/283
-      version = "~> 2.0, < 2.3"
+      source  = "alekc/kubectl"
+      version = "2.4.0"
     }
     time = {
       source  = "hashicorp/time"

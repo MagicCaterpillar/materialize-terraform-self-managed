@@ -21,12 +21,18 @@ provider "helm" {
   }
 }
 
+# lazy_load = true lets alekc/kubectl v2.4.0+ defer kubeconfig resolution
+# (which is strict at provider-configure since v2.3.0) until first use. Without
+# it, same-root cluster-plus-manifests applies fail at plan with an empty REST
+# config because module.gke outputs are unknown before the cluster exists. See:
+# https://registry.terraform.io/providers/alekc/kubectl/latest/docs#troubleshooting
 provider "kubectl" {
   host                   = "https://${module.gke.cluster_endpoint}"
   token                  = data.google_client_config.default.access_token
   cluster_ca_certificate = base64decode(module.gke.cluster_ca_certificate)
 
   load_config_file = false
+  lazy_load        = true
 }
 
 locals {

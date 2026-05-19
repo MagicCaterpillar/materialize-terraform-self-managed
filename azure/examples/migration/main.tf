@@ -62,6 +62,11 @@ provider "helm" {
   }
 }
 
+# lazy_load = true lets alekc/kubectl v2.4.0+ defer kubeconfig resolution
+# (which is strict at provider-configure since v2.3.0) until first use. Without
+# it, same-root cluster-plus-manifests applies fail at plan with an empty REST
+# config because the cluster resource's outputs are unknown before it exists.
+# See: https://registry.terraform.io/providers/alekc/kubectl/latest/docs#troubleshooting
 provider "kubectl" {
   host                   = azurerm_kubernetes_cluster.aks.kube_config[0].host
   client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config[0].client_certificate)
@@ -69,6 +74,7 @@ provider "kubectl" {
   cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config[0].cluster_ca_certificate)
 
   load_config_file = false
+  lazy_load        = true
 }
 
 # -----------------------------------------------------------------------------
