@@ -151,7 +151,7 @@ resource "kubernetes_network_policy_v1" "allow_api_server_egress" {
 # Recent operator versions call https://<svc>:6876/api/login during generation
 # rollout to finalize the Materialize CR. Without this rule the operator wedges
 # at status=Applying because the existing policies only permit port 443 egress.
-# Scoped to port 6876 only; the destination is any namespace because a single
+# Scoped to the environmentd pods (by label) in any namespace, because a single
 # operator can manage instances across multiple namespaces.
 resource "kubernetes_network_policy_v1" "allow_environmentd_egress" {
   count = var.enable_network_policies ? 1 : 0
@@ -171,8 +171,11 @@ resource "kubernetes_network_policy_v1" "allow_environmentd_egress" {
 
     egress {
       to {
-        ip_block {
-          cidr = "0.0.0.0/0"
+        namespace_selector {}
+        pod_selector {
+          match_labels = {
+            "materialize.cloud/app" = "environmentd"
+          }
         }
       }
       ports {

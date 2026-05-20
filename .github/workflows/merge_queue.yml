@@ -26,7 +26,7 @@ jobs:
     needs:
       - lint
       - test-aws
-      #- test-gcp
+      - test-gcp
       - test-azure
     steps:
       - uses: technote-space/workflow-conclusion-action@v3
