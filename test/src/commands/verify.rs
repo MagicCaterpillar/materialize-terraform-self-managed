@@ -198,6 +198,64 @@ async fn dump_materialize_diagnostics(kubeconfig: &Path, namespace: &str, name: 
         &["describe", "pods", "-n", namespace],
     )
     .await;
+    run_section(
+        "kubectl get networkpolicy (all namespaces)",
+        kubeconfig,
+        &["get", "networkpolicy", "-A", "-o", "yaml"],
+    )
+    .await;
+    run_section(
+        "kubectl get svc,endpoints (instance namespace)",
+        kubeconfig,
+        &["get", "svc,endpoints", "-n", namespace, "-o", "wide"],
+    )
+    .await;
+
+    // Probe environmentd:6876 from a pod scheduled into the operator namespace.
+    // That pod inherits the same egress NetworkPolicies as the orchestratord, so
+    // the curl exit / verbose output disambiguates the failure mode (timeout =>
+    // NetworkPolicy or SG drop; refused => no listener; TLS error => cert
+    // mismatch). Best-effort; if anything in the probe fails we just log and
+    // move on.
+    if let Ok(resource_id) = run_cmd_output(kubectl(kubeconfig).args([
+        "get",
+        &format!("materialize/{name}"),
+        "-n",
+        namespace,
+        "-o",
+        "jsonpath={.status.resourceId}",
+    ]))
+    .await
+    {
+        if !resource_id.is_empty() {
+            let target = format!(
+                "https://mz{resource_id}-environmentd-1.{namespace}.svc.cluster.local:6876/api/login"
+            );
+            let probe_name = format!("verify-probe-{resource_id}");
+            println!("\n>>> curl probe from operator namespace -> {target}");
+            if let Err(e) = run_cmd(kubectl(kubeconfig).args([
+                "run",
+                &probe_name,
+                "--rm",
+                "--restart=Never",
+                "-i",
+                "--image=curlimages/curl:latest",
+                "--namespace=materialize",
+                "--command",
+                "--",
+                "curl",
+                "-v",
+                "-k",
+                "--max-time",
+                "15",
+                &target,
+            ]))
+            .await
+            {
+                println!("(probe failed: {e:#})");
+            }
+        }
+    }
 
     println!("\n--- end diagnostics ---");
 }
