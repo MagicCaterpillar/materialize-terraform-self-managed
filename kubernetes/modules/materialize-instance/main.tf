@@ -212,47 +212,6 @@ resource "kubernetes_network_policy_v1" "allow_monitoring_ingress" {
   depends_on = [kubernetes_namespace.instance]
 }
 
-# Allow ingress from the Materialize operator to environmentd on the HTTPS port
-# (6876). Recent operator versions call https://<svc>:6876/api/login during
-# generation rollout to finalize the Materialize CR. The monitoring ingress
-# policy above (pod_selector {}) implicitly denies all other ingress, so
-# without this rule the operator's HTTPS call is dropped at environmentd's
-# ingress and the Materialize CR never advances past status=Applying.
-resource "kubernetes_network_policy_v1" "allow_operator_ingress" {
-  count = var.enable_network_policies ? 1 : 0
-
-  metadata {
-    name      = "allow-operator-ingress"
-    namespace = var.instance_namespace
-  }
-
-  spec {
-    pod_selector {
-      match_labels = {
-        "materialize.cloud/app" = "environmentd"
-      }
-    }
-    policy_types = ["Ingress"]
-
-    ingress {
-      from {
-        namespace_selector {}
-        pod_selector {
-          match_labels = {
-            "app.kubernetes.io/name" = "materialize-operator"
-          }
-        }
-      }
-      ports {
-        protocol = "TCP"
-        port     = 6876
-      }
-    }
-  }
-
-  depends_on = [kubernetes_namespace.instance]
-}
-
 # Allow egress to Kubernetes API server
 # The API server is outside the cluster, so we need
 # to allow HTTPS egress to the control plane IP. Using 0.0.0.0/0 on port 443
