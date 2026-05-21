@@ -151,8 +151,14 @@ resource "kubernetes_network_policy_v1" "allow_api_server_egress" {
 # Recent operator versions call https://<svc>:6876/api/login during generation
 # rollout to finalize the Materialize CR. Without this rule the operator wedges
 # at status=Applying because the existing policies only permit port 443 egress.
-# Scoped to the environmentd pods (by label) in any namespace, because a single
-# operator can manage instances across multiple namespaces.
+#
+# Uses `ip_block { cidr = "0.0.0.0/0" }` instead of a pod_selector for the
+# destination. The pod_selector form is more correct on paper, but the
+# aws-network-policy-agent shipped in aws-vpc-cni v1.21.x (policy agent v1.3.1)
+# does not honor pod_selector-based egress allows in practice: live cluster
+# reproduction showed that a pod_selector form is silently dropped at the
+# eBPF layer, while an ip_block form on the same port is allowed through.
+# Revisit once the upstream CNI bug is fixed.
 resource "kubernetes_network_policy_v1" "allow_environmentd_egress" {
   count = var.enable_network_policies ? 1 : 0
 
@@ -171,11 +177,8 @@ resource "kubernetes_network_policy_v1" "allow_environmentd_egress" {
 
     egress {
       to {
-        namespace_selector {}
-        pod_selector {
-          match_labels = {
-            "materialize.cloud/app" = "environmentd"
-          }
+        ip_block {
+          cidr = "0.0.0.0/0"
         }
       }
       ports {
