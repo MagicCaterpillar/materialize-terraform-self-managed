@@ -226,34 +226,33 @@ async fn dump_materialize_diagnostics(kubeconfig: &Path, namespace: &str, name: 
         "jsonpath={.status.resourceId}",
     ]))
     .await
+        && !resource_id.is_empty()
     {
-        if !resource_id.is_empty() {
-            let target = format!(
-                "https://mz{resource_id}-environmentd-1.{namespace}.svc.cluster.local:6876/api/login"
-            );
-            let probe_name = format!("verify-probe-{resource_id}");
-            println!("\n>>> curl probe from operator namespace -> {target}");
-            if let Err(e) = run_cmd(kubectl(kubeconfig).args([
-                "run",
-                &probe_name,
-                "--rm",
-                "--restart=Never",
-                "-i",
-                "--image=curlimages/curl:latest",
-                "--namespace=materialize",
-                "--command",
-                "--",
-                "curl",
-                "-v",
-                "-k",
-                "--max-time",
-                "15",
-                &target,
-            ]))
-            .await
-            {
-                println!("(probe failed: {e:#})");
-            }
+        let target = format!(
+            "https://mz{resource_id}-environmentd-1.{namespace}.svc.cluster.local:6876/api/login"
+        );
+        let probe_name = format!("verify-probe-{resource_id}");
+        println!("\n>>> curl probe from operator namespace -> {target}");
+        if let Err(e) = run_cmd(kubectl(kubeconfig).args([
+            "run",
+            &probe_name,
+            "--rm",
+            "--restart=Never",
+            "-i",
+            "--image=curlimages/curl:latest",
+            "--namespace=materialize",
+            "--command",
+            "--",
+            "curl",
+            "-v",
+            "-k",
+            "--max-time",
+            "15",
+            &target,
+        ]))
+        .await
+        {
+            println!("(probe failed: {e:#})");
         }
     }
 
