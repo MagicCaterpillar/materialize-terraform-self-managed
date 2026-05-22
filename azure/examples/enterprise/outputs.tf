@@ -182,24 +182,13 @@ output "ory_database_endpoint" {
   value       = module.ory_database.server_fqdn
 }
 
-output "ory_kratos" {
-  description = "Ory Kratos deployment details"
+output "ory" {
+  description = "Ory stack deployment details (Hydra issuer URL, Kratos and UI external URLs, OAuth2 client secret name)."
   value = {
-    public_url     = module.ory_kratos.public_url
-    admin_url      = module.ory_kratos.admin_url
-    namespace      = module.ory_kratos.namespace
-    release_name   = module.ory_kratos.release_name
-    release_status = module.ory_kratos.release_status
-  }
-}
-
-output "ory_hydra" {
-  description = "Ory Hydra deployment details"
-  value = {
-    public_url     = module.ory_hydra.public_url
-    admin_url      = module.ory_hydra.admin_url
-    namespace      = module.ory_hydra.namespace
-    release_name   = module.ory_hydra.release_name
-    release_status = module.ory_hydra.release_status
+    namespace                 = module.ory.namespace
+    hydra_external_url        = module.ory.hydra_external_url
+    kratos_external_url       = module.ory.kratos_external_url
+    ui_external_url           = module.ory.ui_external_url
+    oauth2_client_secret_name = module.ory.oauth2_client_secret_name
   }
 }
