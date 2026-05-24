@@ -21,9 +21,8 @@ variable "name_prefix" {
 }
 
 variable "license_key" {
-  description = "Materialize license key"
+  description = "Materialize license key JWT. Required for this example: used both by Materialize itself and as the password in the imagePullSecret that authenticates to the Materialize-hosted Ory registry proxy."
   type        = string
-  default     = null
   sensitive   = true
 }
 
@@ -71,21 +70,15 @@ variable "enable_observability" {
 
 # Ory variables
 variable "ory_oel_registry" {
-  description = "Base registry URL for Ory Enterprise License images. Example: europe-docker.pkg.dev/ory-artifacts"
+  description = "Base registry URL for Ory Enterprise License images. Defaults to the production Materialize-hosted registry proxy. Override for staging (ory.registry.staging.cloud.materialize.com/ory-artifacts) or a dev stack."
   type        = string
+  default     = "ory.registry.cloud.materialize.com/ory-artifacts"
 }
 
 variable "ory_oel_image_tag" {
   description = "Image tag for OEL images."
   type        = string
   default     = "26.2.3"
-}
-
-# TODO: Update auth mechanism once Materialize private registry is set up.
-# Currently uses a GCP service account key file for Ory's Artifact Registry.
-variable "ory_oel_key_file" {
-  description = "Path to the GCP service account JSON key file for pulling OEL images from Ory's Artifact Registry."
-  type        = string
 }
 
 variable "ory_hydra_hostname" {
