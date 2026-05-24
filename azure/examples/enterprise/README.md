@@ -2,7 +2,7 @@
 
 This example extends the [simple deployment](../simple/) with **Ory Kratos** (identity management) and **Ory Hydra** (OAuth2/OIDC provider) for enterprise authentication via OIDC and SAML.
 
-> **Status: work in progress.** This example currently uses an Ory OEL service-account key file to pull images and is expected to evolve before the feature is generally available. The auth mechanism will be replaced with the Materialize-hosted registry proxy once it ships.
+Ory enterprise images are pulled through the Materialize-hosted registry proxy at `ory.registry.cloud.materialize.com`. The proxy authenticates with the Materialize license key JWT, so no separate Ory credential is needed. Cluster nodes need egress to the proxy host and to `storage.googleapis.com` (the proxy returns 307 redirects to signed GCS URLs for blob GETs, which the kubelet follows directly).
 
 ---
 
@@ -42,12 +42,11 @@ subscription_id     = "12345678-1234-1234-1234-123456789012"
 resource_group_name = "materialize-enterprise-rg"
 name_prefix         = "enterprise-demo"
 location            = "westus2"
-license_key         = "your-materialize-license-key"
 
-# OEL image pull credentials (see Materialize sales for access to Ory's
-# private registry while the Materialize-hosted mirror is in flight).
-ory_oel_registry = "europe-docker.pkg.dev/ory-artifacts"
-ory_oel_key_file = "/path/to/ory-artifacts-sa-key.json"
+# Materialize license key JWT. Used both by Materialize and as the password
+# in the imagePullSecret authenticating to the Ory registry proxy. Reach out
+# to Materialize sales / support to get one issued with the `ory` entitlement.
+license_key = "your-materialize-license-key"
 
 # Public hostnames used for browser traffic and OIDC redirects. These must
 # resolve to the LB IPs after apply (see "DNS records" below).
@@ -66,10 +65,8 @@ tags = {
 - `resource_group_name`: Name for the resource group (will be created)
 - `name_prefix`: Prefix for all resource names
 - `tags`: Map of tags to apply to resources
-- `license_key`: Materialize license key
+- `license_key`: Materialize license key JWT. Used for Materialize itself and as the password authenticating to the Ory registry proxy. Must carry the `ory` entitlement.
 - `k8s_apiserver_authorized_networks`: List of CIDR blocks allowed to reach the AKS API server. No default; pass `["0.0.0.0/0"]` for lab use, or a tight allowlist for production.
-- `ory_oel_registry`: Base registry URL for the Ory Enterprise License (OEL) images
-- `ory_oel_key_file`: Path to a service-account key file with read access to `ory_oel_registry`
 - `ory_hydra_hostname`, `ory_ui_hostname`, `ory_kratos_hostname`, `materialize_console_hostname`: Public hostnames for the four browser-facing services
 
 **Optional Variables:**
@@ -261,12 +258,6 @@ terraform destroy
 ---
 
 ## Limitations
-
-### OEL registry credentials in Terraform state
-
-The ory-stack module reads `var.ory_oel_key_file` via `file()` at plan time and embeds the decoded JSON service-account key into a Kubernetes secret in the `ory` namespace. Terraform stores that value in plaintext in the state file. Anyone with read access to the state backend (Azure Blob, S3, the local `terraform.tfstate`) can extract working GCP credentials for Ory's Artifact Registry.
-
-Treat the state file as a secret. The planned replacement is the Materialize-hosted OEL mirror, which authenticates against a registry proxy using the license-key JWT (no shared service-account key on disk). Migrate to that path once it ships.
 
 ### Resource-group destroy guard
 
