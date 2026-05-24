@@ -250,8 +250,8 @@ After `terraform apply`, create A records for your hostnames (Hydra, Kratos, sel
 - Ory Kratos and Hydra share a namespace (`ory`) but use separate databases on the same Cloud SQL instance
 - The Ory Cloud SQL instance uses a smaller tier (`db-f1-micro`) since Ory workloads are lightweight
 - Both Ory components are scheduled on generic nodes (not the Materialize-dedicated node pool)
-- Cloud SQL on GCP has PostgreSQL extensions (pg_trgm, btree_gin, uuid-ossp) available by default — no allowlisting needed
-- For production, configure identity schemas for Kratos and register OAuth2 clients in Hydra via the `helm_values` override or Hydra Maester CRDs
+- Cloud SQL on GCP has PostgreSQL extensions (pg_trgm, btree_gin, uuid-ossp) available by default, no allowlisting needed
+- For production, override Kratos and Hydra chart values via `kratos_helm_values` and `hydra_helm_values` on the `module.ory` call (they deep-merge on top of the baked-in defaults), and register additional OAuth2 clients via Hydra Maester CRDs (Maester is enabled by default)
 - Don't forget to destroy resources when finished:
 
 ```bash
@@ -264,7 +264,7 @@ terraform destroy
 
 ### OEL registry credentials in Terraform state
 
-The `kubernetes_secret.ory_oel_registry` resource reads `var.ory_oel_key_file` via `file()` at plan time and embeds the decoded JSON service-account key into the Kubernetes secret's `data` field. Terraform stores that value in plaintext in the state file. Anyone with read access to the state backend (GCS, S3, the local `terraform.tfstate`) can extract working GCP credentials for Ory's Artifact Registry.
+The ory-stack module reads `var.ory_oel_key_file` via `file()` at plan time and embeds the decoded JSON service-account key into a Kubernetes secret in the `ory` namespace. Terraform stores that value in plaintext in the state file. Anyone with read access to the state backend (GCS, S3, the local `terraform.tfstate`) can extract working GCP credentials for Ory's Artifact Registry.
 
 Treat the state file as a secret. The planned replacement is the Materialize-hosted OEL mirror, which authenticates against a registry proxy using the license-key JWT (no shared service-account key on disk). Migrate to that path once it ships.
 
