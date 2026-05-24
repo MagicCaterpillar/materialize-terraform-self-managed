@@ -15,7 +15,7 @@ variable "location" {
 }
 
 variable "name_prefix" {
-  description = "The prefix of the Azure subscription"
+  description = "Prefix used for resource names."
   type        = string
 }
 
