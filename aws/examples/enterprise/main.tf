@@ -548,9 +548,9 @@ module "ory" {
   kratos_dsn = local.ory_kratos_dsn
   hydra_dsn  = local.ory_hydra_dsn
 
-  oel_registry  = var.ory_oel_registry
-  oel_image_tag = var.ory_oel_image_tag
-  oel_key_file  = var.ory_oel_key_file
+  oel_registry    = var.ory_oel_registry
+  oel_image_tag   = var.ory_oel_image_tag
+  license_key_jwt = var.license_key
 
   cert_issuer_ref                 = local.cert_issuer
   cert_issuer_signs_cluster_local = var.cert_issuer_ref == null
