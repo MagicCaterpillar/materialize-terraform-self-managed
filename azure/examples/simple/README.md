@@ -137,6 +137,23 @@ terraform init
 terraform apply
 ```
 
+If your subscription has low vCPU quotas (for example 10 total regional vCPUs), use the low-quota profile:
+
+```bash
+terraform init
+terraform apply -var-file=terraform.tfvars -var-file=terraform.low-quota.tfvars
+```
+
+This profile scales down both AKS node pools to a single smaller node each:
+- Default node pool: `Standard_D2pds_v6`, autoscaling disabled, 1 node
+- Materialize node pool: `Standard_E2pds_v6`, autoscaling disabled, 1 node
+
+Once your quota increase is approved, remove the low-quota var file from the command to return to standard sizing.
+
+Note for Windows users:
+- This example keeps AKS default CoreDNS and CoreDNS autoscaler enabled to avoid bash-dependent `local-exec` steps in the CoreDNS module.
+- This is intentional for cross-platform compatibility in this example.
+
 ---
 
 ### Step 3: Accessing Materialize

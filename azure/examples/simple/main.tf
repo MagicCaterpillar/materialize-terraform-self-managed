@@ -56,11 +56,11 @@ locals {
   }
 
   node_pool_config = {
-    vm_size              = "Standard_E4pds_v6"
-    auto_scaling_enabled = true
-    min_nodes            = 2
-    max_nodes            = 5
-    node_count           = null
+    vm_size              = var.materialize_node_pool_vm_size
+    auto_scaling_enabled = var.materialize_node_pool_auto_scaling_enabled
+    min_nodes            = var.materialize_node_pool_min_nodes
+    max_nodes            = var.materialize_node_pool_max_nodes
+    node_count           = var.materialize_node_pool_node_count
     disk_size_gb         = 100
     swap_enabled         = true
   }
@@ -170,10 +170,11 @@ module "aks" {
   api_server_subnet_id               = module.networking.api_server_subnet_id
 
   # Default node pool with autoscaling (runs all workloads except Materialize)
-  default_node_pool_vm_size             = "Standard_D4pds_v6"
-  default_node_pool_enable_auto_scaling = true
-  default_node_pool_min_count           = 2
-  default_node_pool_max_count           = 5
+  default_node_pool_vm_size             = var.default_node_pool_vm_size
+  default_node_pool_enable_auto_scaling = var.default_node_pool_enable_auto_scaling
+  default_node_pool_node_count          = var.default_node_pool_node_count
+  default_node_pool_min_count           = var.default_node_pool_min_count
+  default_node_pool_max_count           = var.default_node_pool_max_count
   default_node_pool_node_labels         = local.generic_node_labels
 
   # Optional: Enable monitoring
@@ -281,9 +282,11 @@ resource "random_password" "external_login_password_mz_system" {
 
 # Deploy custom CoreDNS with TTL 0 (AKS's coredns doesn't support disabling caching)
 module "coredns" {
-  source          = "../../../kubernetes/modules/coredns"
-  node_selector   = local.generic_node_labels
-  kubeconfig_data = module.aks.kube_config_raw
+  source                             = "../../../kubernetes/modules/coredns"
+  node_selector                      = local.generic_node_labels
+  kubeconfig_data                    = module.aks.kube_config_raw
+  disable_default_coredns            = false
+  disable_default_coredns_autoscaler = false
   depends_on = [
     module.aks,
     module.networking,

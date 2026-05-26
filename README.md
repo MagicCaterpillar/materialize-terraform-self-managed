@@ -156,6 +156,35 @@ module "materialize_instance" {
 }
 ```
 
+### SQL Server Local Access (Private)
+
+In order to connect to SQL server from the local machine, port forwarding is used through the command `kubectl port-forward`.
+
+Use the helper script:
+
+```powershell
+./sql-server/scripts/connect-local-sqlserver.ps1
+```
+
+What it does:
+- Starts a localhost-only tunnel (`127.0.0.1:<local-port> -> sql-server service:1433`)
+- Optionally runs a SQL login/query health check
+- Prints SSMS/HammerDB connection settings
+- Stops the tunnel when you press Enter
+
+Manual equivalent:
+
+```powershell
+kubectl port-forward svc/mssql -n sql-server 11433:1433 --address 127.0.0.1
+```
+
+Then connect from SSMS/HammerDB to:
+- Server: `127.0.0.1,11433`
+- Login: `SA`
+- Password: `terraform -chdir="sql-server/examples/azure" output -raw sa_password`
+- Encrypt: `True`
+- Trust Server Certificate: `True`
+
 ---
 
 ## Development & Contributing

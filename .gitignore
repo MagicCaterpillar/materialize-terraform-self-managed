@@ -35,8 +35,11 @@ tests/.terraform.lock.hcl
 
 # Local development
 *local.env
+.env
+.env.*
 .envrc
 *.bak
+terraform-outputs-*.txt
 
 *testRuns/
 

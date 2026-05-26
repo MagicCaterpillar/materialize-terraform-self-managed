@@ -1,0 +1,113 @@
+# =============================================================================
+# sql-server / examples / azure – terraform.tfvars
+#
+# Copy this file to terraform.tfvars and fill in your values.
+# Lines starting with # are comments and are ignored by Terraform.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Required – Azure / AKS targeting
+# ---------------------------------------------------------------------------
+
+subscription_id     = "00000000-0000-0000-0000-000000000000"
+resource_group_name = "my-resource-group"
+
+# Set to the AKS cluster where SQL Server should run.
+# This can be the same cluster as Materialize (e.g. the output
+# aks_cluster_name from azure/examples/simple) or a separate cluster.
+aks_cluster_name = "my-aks-cluster"
+
+# Terraform-managed amd64 pool for SQL Server (required for mssql/server image)
+create_amd64_node_pool              = true
+amd64_node_pool_name                = "sqlx64"
+amd64_node_pool_vm_size             = "Standard_D2s_v3"
+# Set to AKS subnet ID for existing Azure CNI clusters
+# (example) /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<aks-subnet>
+amd64_node_pool_vnet_subnet_id      = null
+amd64_node_pool_enable_auto_scaling = false
+amd64_node_pool_node_count          = 1
+amd64_node_pool_min_count           = 1
+amd64_node_pool_max_count           = 1
+force_amd64_scheduling              = true
+
+# ---------------------------------------------------------------------------
+# Identity & image  (defaults shown – override as needed)
+# ---------------------------------------------------------------------------
+
+namespace      = "sql-server"
+name_prefix    = "mssql"
+image_tag      = "2022-latest"
+sql_server_pid = "Developer"   # Developer = free, full-featured, non-production
+enable_sql_agent = true         # Required for CDC → Materialize source
+
+# SA password – leave commented out to auto-generate a strong password.
+# Retrieve after apply: terraform output -raw sa_password
+# sa_password = "YourStr0ng!Password"
+
+# ---------------------------------------------------------------------------
+# Performance profile  – choose one of the tiers below or set custom values
+# ---------------------------------------------------------------------------
+
+# --- LIGHT (default) – development, initial testing, CDC exploration -------
+cpu_request    = "2"
+cpu_limit      = "4"
+memory_request = "4Gi"
+memory_limit   = "8Gi"
+# max_server_memory_mb = null   # auto-detect from cgroup limit
+
+# --- MEDIUM – moderate CDC throughput, light analytical queries ------------
+# cpu_request    = "4"
+# cpu_limit      = "8"
+# memory_request = "16Gi"
+# memory_limit   = "20Gi"
+# max_server_memory_mb = 19456   # 20 GiB - 512 MiB headroom
+
+# --- HEAVY – sustained high-throughput load tests against SQL Server -------
+# cpu_request    = "8"
+# cpu_limit      = "16"
+# memory_request = "28Gi"
+# memory_limit   = "32Gi"
+# max_server_memory_mb = 30720   # 32 GiB - 512 MiB headroom
+
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+
+data_storage_size  = "32Gi"
+
+# AKS StorageClass options:
+#   managed-csi           – Standard SSD  (development / light testing)
+#   managed-csi-premium   – Premium SSD   (recommended default on many AKS clusters)
+#   managed-premium       – Premium SSD   (alternate name on some AKS clusters)
+#   managed-ultra-csi     – Ultra Disk    (maximum IOPS for peak load tests, if installed)
+storage_class_name = "managed-csi-premium"
+
+# ---------------------------------------------------------------------------
+# Scheduling  (optional – pin SQL Server to a dedicated node pool)
+# ---------------------------------------------------------------------------
+
+# node_selector = {
+#   "agentpool" = "sqlpool"
+# }
+
+# tolerations = [
+#   {
+#     key      = "dedicated"
+#     operator = "Equal"
+#     value    = "sql-server"
+#     effect   = "NoSchedule"
+#   }
+# ]
+
+# ---------------------------------------------------------------------------
+# Networking
+# ---------------------------------------------------------------------------
+
+service_type = "ClusterIP"   # In-cluster only – Materialize connects via FQDN
+
+# To expose SQL Server via an Azure Internal Load Balancer (e.g. for
+# connecting from outside the cluster but within the VNet):
+# service_type = "LoadBalancer"
+# service_annotations = {
+#   "service.beta.kubernetes.io/azure-load-balancer-internal" = "true"
+# }
