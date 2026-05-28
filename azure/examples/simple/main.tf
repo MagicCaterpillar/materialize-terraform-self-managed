@@ -239,7 +239,8 @@ module "database" {
   # Infrastructure configuration
   resource_group_name = azurerm_resource_group.materialize.name
   location            = var.location
-  prefix              = var.name_prefix
+  # Use a database-specific prefix to avoid globally-colliding server names
+  prefix              = "${var.name_prefix}-db"
   subnet_id           = module.networking.postgres_subnet_id
   private_dns_zone_id = module.networking.private_dns_zone_id
 
