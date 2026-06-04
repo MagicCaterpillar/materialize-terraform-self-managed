@@ -1,5 +1,6 @@
 # Local .terraform directories
 **/.terraform/*
+**/.terraform.backup/*
 
 # .tfstate files
 *.tfstate
@@ -40,6 +41,7 @@ tests/.terraform.lock.hcl
 .envrc
 *.bak
 terraform-outputs-*.txt
+az_*.json
 
 *testRuns/
 

@@ -397,6 +397,7 @@ module "materialize_instance" {
   # Azure workload identity annotations for service account
   service_account_annotations = {
     "azure.workload.identity/client-id" = module.aks.workload_identity_client_id
+    "azure.workload.identity/use" = "true"
   }
   pod_labels = {
     "azure.workload.identity/use" = "true"

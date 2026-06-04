@@ -37,6 +37,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "sql_amd64" {
   mode                  = "User"
   os_type               = "Linux"
   vnet_subnet_id        = var.amd64_node_pool_vnet_subnet_id
+  temporary_name_for_rotation = "sqlx64tmp"
 
   auto_scaling_enabled = var.amd64_node_pool_enable_auto_scaling
   node_count           = var.amd64_node_pool_enable_auto_scaling ? null : var.amd64_node_pool_node_count
