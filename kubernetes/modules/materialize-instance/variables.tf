@@ -131,14 +131,20 @@ variable "force_rollout" {
 
 # Balancer Resource Requirements
 variable "balancer_memory_request" {
-  description = "Memory request for balancer"
+  # NOTE: 256Mi is fine for light use but OOM-kills balancerd under high
+  # connection load (observed during a HammerDB + Locust load test against a
+  # self-managed Azure/AKS deployment — balancerd, not the cluster, was the
+  # ceiling). Override to ~2Gi for high-connection / load-test workloads.
+  description = "Memory request for balancer. 256Mi OOM-kills under high connection load; raise to ~2Gi for high-connection workloads."
   type        = string
   default     = "256Mi"
   nullable    = false
 }
 
 variable "balancer_memory_limit" {
-  description = "Memory limit for balancer"
+  # See balancer_memory_request: raise alongside it (e.g. 2Gi) for
+  # high-connection / load-test workloads to avoid OOM kills.
+  description = "Memory limit for balancer. 256Mi OOM-kills under high connection load; raise to ~2Gi for high-connection workloads."
   type        = string
   default     = "256Mi"
   nullable    = false

@@ -36,8 +36,8 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_authenticator_kind"></a> [authenticator\_kind](#input\_authenticator\_kind) | Kind of authenticator to use for Materialize instance | `string` | `"None"` | no |
 | <a name="input_balancer_cpu_request"></a> [balancer\_cpu\_request](#input\_balancer\_cpu\_request) | CPU request for balancer | `string` | `"100m"` | no |
-| <a name="input_balancer_memory_limit"></a> [balancer\_memory\_limit](#input\_balancer\_memory\_limit) | Memory limit for balancer | `string` | `"256Mi"` | no |
-| <a name="input_balancer_memory_request"></a> [balancer\_memory\_request](#input\_balancer\_memory\_request) | Memory request for balancer | `string` | `"256Mi"` | no |
+| <a name="input_balancer_memory_limit"></a> [balancer\_memory\_limit](#input\_balancer\_memory\_limit) | Memory limit for balancer. 256Mi OOM-kills under high connection load; raise to ~2Gi for high-connection workloads. | `string` | `"256Mi"` | no |
+| <a name="input_balancer_memory_request"></a> [balancer\_memory\_request](#input\_balancer\_memory\_request) | Memory request for balancer. 256Mi OOM-kills under high connection load; raise to ~2Gi for high-connection workloads. | `string` | `"256Mi"` | no |
 | <a name="input_balancerd_extra_dns_names"></a> [balancerd\_extra\_dns\_names](#input\_balancerd\_extra\_dns\_names) | Additional DNS names to include in the balancerd TLS certificate. Useful when balancerd is exposed via an external hostname. | `list(string)` | `[]` | no |
 | <a name="input_console_extra_dns_names"></a> [console\_extra\_dns\_names](#input\_console\_extra\_dns\_names) | Additional DNS names to include in the console TLS certificate. Useful when the console is exposed via an external hostname (e.g., materialize.internal.example.com). | `list(string)` | `[]` | no |
 | <a name="input_cpu_request"></a> [cpu\_request](#input\_cpu\_request) | CPU request for environmentd | `string` | `"1"` | no |
